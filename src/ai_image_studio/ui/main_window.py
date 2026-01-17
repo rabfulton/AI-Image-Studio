@@ -232,6 +232,7 @@ class MainWindow(QMainWindow):
         self._node_library_panel = NodeLibraryPanel()
         self._node_library_panel.node_requested.connect(self._on_add_node_requested)
         self._node_library_panel.setMinimumWidth(200)
+        self._node_library_panel.refresh_from_registry()  # Load actual registered nodes
         self._node_library_dock.setWidget(self._node_library_panel)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._node_library_dock)
         
@@ -859,8 +860,6 @@ class MainWindow(QMainWindow):
         parts = type_id.split(".")
         category = parts[0] if parts else "utility"
         
-        print(f"DEBUG _on_add_node_requested: type_id={type_id}, category={category}")
-        
         # Get title and IO from node type if available
         if node_type:
             title = node_type.name
@@ -922,8 +921,29 @@ class MainWindow(QMainWindow):
             core_node = self._graph.get_node(core_id)
             if core_node:
                 core_node.set_parameter(param_name, value)
+                
+                # Check if this is a file path parameter - load preview
+                if param_name in ("file", "image_path", "input_image") and value:
+                    self._update_node_image_preview(node_id, value)
         
         self.statusBar().showMessage(f"{param_name} = {value}", 1500)
+    
+    def _update_node_image_preview(self, node_id: str, file_path: str) -> None:
+        """Load image from path and update node's preview thumbnail."""
+        from pathlib import Path
+        try:
+            from PIL import Image
+            
+            if Path(file_path).exists():
+                # Load and create thumbnail
+                img = Image.open(file_path)
+                img.thumbnail((120, 120))  # Limit size for efficiency
+                
+                # Update canvas preview
+                self._node_graph_canvas.set_node_preview(node_id, img)
+                self._console_panel.log_info(f"Loaded preview: {Path(file_path).name}")
+        except Exception as e:
+            self._console_panel.log_warning(f"Could not load preview: {e}")
     
     def _on_node_selected(self, node_id) -> None:
         """Handle node selection from canvas."""
@@ -973,15 +993,26 @@ class MainWindow(QMainWindow):
     
     def _get_type_id_for_node(self, visual_node) -> str | None:
         """Map a visual node to its NodeType ID."""
-        # Map by title/category to type_id
+        # The type_id is stored directly on the visual node
+        if visual_node.type_id:
+            return visual_node.type_id
+        
+        # Legacy fallback - map by title (for old sessions without type_id)
         title_lower = visual_node.title.lower()
         
         if "text to image" in title_lower:
             return "generation.text_to_image"
         elif "image to image" in title_lower:
             return "generation.image_to_image"
+        elif "prompt" in title_lower:
+            return "input.prompt"
+        elif "load image" in title_lower or "image input" in title_lower:
+            return "input.image"
+        elif "preview" in title_lower:
+            return "output.preview"
+        elif "save" in title_lower:
+            return "output.save_image"
         
-        # Could add more mappings here
         return None
     
     def _get_default_properties(self, category: str, title: str) -> dict:

@@ -229,6 +229,8 @@ class PropertiesPanel(QWidget):
         # Create widget based on type
         widget: QWidget | None = None
         
+        print(f"DEBUG _add_parameter_widget: name={name}, param_type={param_def.param_type}, type={type(param_def.param_type)}")
+        
         if param_def.param_type == ParameterType.TEXT:
             widget = QLineEdit()
             widget.setText(str(value) if value else "")
@@ -372,6 +374,75 @@ class PropertiesPanel(QWidget):
             # Initial load of model params
             if value:
                 self._pending_model_id = value  # Set after widgets are added
+        
+        elif param_def.param_type == ParameterType.FILE_PATH:
+            # File path with browse button
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(4)
+            
+            path_edit = QLineEdit()
+            path_edit.setText(str(value) if value else "")
+            path_edit.setPlaceholderText("Select file...")
+            path_edit.textChanged.connect(
+                lambda v, n=name: self._on_value_changed(n, v)
+            )
+            
+            browse_btn = QPushButton("📂")
+            browse_btn.setFixedWidth(32)
+            browse_btn.setToolTip("Browse for file")
+            
+            def on_browse(n=name, edit=path_edit):
+                file_path, _ = QFileDialog.getOpenFileName(
+                    self,
+                    "Select Image",
+                    "",
+                    "Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp);;All Files (*)"
+                )
+                if file_path:
+                    edit.setText(file_path)
+                    self._on_value_changed(n, file_path)
+            
+            browse_btn.clicked.connect(on_browse)
+            
+            layout.addWidget(path_edit, 1)
+            layout.addWidget(browse_btn)
+            widget = container
+        
+        elif param_def.param_type == ParameterType.FOLDER_PATH:
+            # Folder path with browse button
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(4)
+            
+            path_edit = QLineEdit()
+            path_edit.setText(str(value) if value else "")
+            path_edit.setPlaceholderText("Select folder...")
+            path_edit.textChanged.connect(
+                lambda v, n=name: self._on_value_changed(n, v)
+            )
+            
+            browse_btn = QPushButton("📁")
+            browse_btn.setFixedWidth(32)
+            browse_btn.setToolTip("Browse for folder")
+            
+            def on_browse_folder(n=name, edit=path_edit):
+                folder_path = QFileDialog.getExistingDirectory(
+                    self,
+                    "Select Folder",
+                    "",
+                )
+                if folder_path:
+                    edit.setText(folder_path)
+                    self._on_value_changed(n, folder_path)
+            
+            browse_btn.clicked.connect(on_browse_folder)
+            
+            layout.addWidget(path_edit, 1)
+            layout.addWidget(browse_btn)
+            widget = container
         
         else:
             # Default text input for unknown types

@@ -245,7 +245,6 @@ class NodeGraphCanvas(QWidget):
             outputs=outputs or [],
         )
         self._nodes[node_id] = visual
-        print(f"DEBUG add_visual_node: id={node_id[:8]}, category={category}, visual.category={visual.category}")
         self.update()
     
     def remove_visual_node(self, node_id: str) -> None:
@@ -258,6 +257,28 @@ class NodeGraphCanvas(QWidget):
                 c for c in self._connections
                 if c[0] != node_id and c[2] != node_id
             ]
+            self.update()
+    
+    def set_node_preview(self, node_id: str, image) -> None:
+        """Set the preview thumbnail for a node (PIL Image or QImage)."""
+        if node_id in self._nodes:
+            # Convert PIL Image to QImage if needed
+            if image is not None and hasattr(image, 'tobytes'):
+                # It's a PIL Image - convert to QImage
+                from PySide6.QtGui import QImage
+                
+                if image.mode == "RGBA":
+                    fmt = QImage.Format.Format_RGBA8888
+                else:
+                    image = image.convert("RGBA")
+                    fmt = QImage.Format.Format_RGBA8888
+                
+                data = image.tobytes("raw", "RGBA")
+                qimg = QImage(data, image.width, image.height, fmt)
+                self._nodes[node_id].preview_image = qimg.copy()  # Copy to own the data
+            else:
+                self._nodes[node_id].preview_image = image
+            
             self.update()
     
     def add_visual_connection(
@@ -445,7 +466,6 @@ class NodeGraphCanvas(QWidget):
         header_path.closeSubpath()
         
         header_color = NODE_COLORS.get(node.category, NODE_COLORS["default"])
-        print(f"DEBUG _draw_node: {node.title}, cat={node.category}, color={header_color.name()}")
         painter.fillPath(header_path, header_color)
         
         # Border
@@ -465,6 +485,29 @@ class NodeGraphCanvas(QWidget):
         painter.setFont(title_font)
         title_rect = QRectF(sx + 10, sy, sw - 20, self.NODE_HEADER_HEIGHT * self._transform.zoom)
         painter.drawText(title_rect, Qt.AlignmentFlag.AlignVCenter, node.title)
+        
+        # Preview image thumbnail (if any)
+        if node.preview_image is not None:
+            from PySide6.QtGui import QImage, QPixmap
+            
+            # Calculate preview area (after header, before sockets)
+            preview_margin = 8 * self._transform.zoom
+            preview_size = min(sw - 20 * self._transform.zoom, 80 * self._transform.zoom)
+            preview_x = sx + (sw - preview_size) / 2
+            preview_y = sy + header_h + preview_margin
+            
+            # Draw the preview
+            if isinstance(node.preview_image, QImage):
+                pixmap = QPixmap.fromImage(node.preview_image)
+                scaled = pixmap.scaled(
+                    int(preview_size), int(preview_size),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                # Center the scaled image
+                offset_x = (preview_size - scaled.width()) / 2
+                offset_y = (preview_size - scaled.height()) / 2
+                painter.drawPixmap(int(preview_x + offset_x), int(preview_y + offset_y), scaled)
         
         # Sockets
         socket_font = QFont(self._socket_font)
