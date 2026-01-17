@@ -153,25 +153,13 @@ class MainWindow(QMainWindow):
         # Add some demo nodes
         self._add_demo_nodes()
         
-        # Placeholder for Output Studio
-        output_studio_placeholder = QWidget()
-        output_studio_layout = QVBoxLayout(output_studio_placeholder)
-        output_studio_label = QLabel("Output Studio")
-        output_studio_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        output_studio_label.setStyleSheet("""
-            QLabel {
-                background-color: #16213e;
-                color: #808080;
-                font-size: 24px;
-                border: 1px solid #333;
-            }
-        """)
-        output_studio_layout.addWidget(output_studio_label)
-        output_studio_layout.setContentsMargins(0, 0, 0, 0)
+        # Output Studio (real widget)
+        from ai_image_studio.ui.output_studio import OutputStudio
+        self._output_studio = OutputStudio()
         
         # Add to splitter
         self._main_splitter.addWidget(self._node_graph_canvas)
-        self._main_splitter.addWidget(output_studio_placeholder)
+        self._main_splitter.addWidget(self._output_studio)
         self._main_splitter.setSizes([600, 400])
         
         self.setCentralWidget(self._main_splitter)
@@ -251,15 +239,17 @@ class MainWindow(QMainWindow):
     
     def _setup_dock_widgets(self) -> None:
         """Create dock widgets for panels."""
+        from ai_image_studio.ui.panels import NodeLibraryPanel, PropertiesPanel
+        
         # Node Library dock (left)
         self._node_library_dock = QDockWidget("Node Library", self)
         self._node_library_dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
-        node_library_placeholder = QLabel("Node Library\n\n(Tree view of nodes)")
-        node_library_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        node_library_placeholder.setMinimumWidth(200)
-        self._node_library_dock.setWidget(node_library_placeholder)
+        self._node_library_panel = NodeLibraryPanel()
+        self._node_library_panel.node_requested.connect(self._on_add_node_requested)
+        self._node_library_panel.setMinimumWidth(200)
+        self._node_library_dock.setWidget(self._node_library_panel)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._node_library_dock)
         
         # Properties dock (right)
@@ -267,10 +257,10 @@ class MainWindow(QMainWindow):
         self._properties_dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
-        properties_placeholder = QLabel("Properties\n\n(Selected node parameters)")
-        properties_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        properties_placeholder.setMinimumWidth(250)
-        self._properties_dock.setWidget(properties_placeholder)
+        self._properties_panel = PropertiesPanel()
+        self._properties_panel.parameter_changed.connect(self._on_parameter_changed)
+        self._properties_panel.setMinimumWidth(250)
+        self._properties_dock.setWidget(self._properties_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._properties_dock)
         
         # Gallery dock (right, bottom)
@@ -438,3 +428,114 @@ class MainWindow(QMainWindow):
             "<li>Batch processing and scripting</li>"
             "</ul>"
         )
+    
+    def _on_add_node_requested(self, type_id: str) -> None:
+        """Handle request to add a node from the library."""
+        import random
+        
+        # Generate unique ID
+        node_id = f"node_{random.randint(1000, 9999)}"
+        
+        # Parse type_id to get category and title
+        parts = type_id.split(".")
+        category = parts[0] if parts else "utility"
+        title = parts[-1].replace("_", " ").title() if parts else type_id
+        
+        # Define inputs/outputs based on type
+        node_defs = {
+            "input.prompt": ([], [("text", "TEXT")]),
+            "input.image": ([], [("image", "IMAGE")]),
+            "input.mask": ([], [("mask", "MASK")]),
+            "generation.text_to_image": (
+                [("prompt", "TEXT"), ("negative", "TEXT"), ("model", "MODEL")],
+                [("image", "IMAGE")],
+            ),
+            "generation.image_to_image": (
+                [("image", "IMAGE"), ("prompt", "TEXT")],
+                [("image", "IMAGE")],
+            ),
+            "generation.inpaint": (
+                [("image", "IMAGE"), ("mask", "MASK"), ("prompt", "TEXT")],
+                [("image", "IMAGE")],
+            ),
+            "enhancement.upscale": (
+                [("image", "IMAGE")],
+                [("image", "IMAGE")],
+            ),
+            "output.preview": ([("image", "IMAGE")], []),
+            "output.save": ([("image", "IMAGE")], []),
+        }
+        
+        inputs, outputs = node_defs.get(type_id, ([], []))
+        
+        # Add at center of view (offset for visibility)
+        self._node_graph_canvas.add_visual_node(
+            node_id=node_id,
+            x=200 + random.randint(-50, 50),
+            y=150 + random.randint(-50, 50),
+            title=title,
+            category=category,
+            inputs=inputs,
+            outputs=outputs,
+        )
+        
+        self.statusBar().showMessage(f"Added {title} node", 2000)
+    
+    def _on_parameter_changed(self, node_id: str, param_name: str, value) -> None:
+        """Handle parameter change from properties panel."""
+        self.statusBar().showMessage(f"{param_name} = {value}", 1500)
+    
+    def _on_node_selected(self, node_id) -> None:
+        """Handle node selection from canvas."""
+        if node_id:
+            self.statusBar().showMessage(f"Selected: {node_id}", 2000)
+            
+            # Get node info from canvas
+            if node_id in self._node_graph_canvas._nodes:
+                node = self._node_graph_canvas._nodes[node_id]
+                
+                # Show sample properties based on category
+                props = self._get_default_properties(node.category, node.title)
+                self._properties_panel.set_simple_properties(
+                    node_id=node_id,
+                    title=node.title,
+                    properties=props,
+                )
+        else:
+            self._properties_panel.set_node(None)
+    
+    def _get_default_properties(self, category: str, title: str) -> dict:
+        """Get default properties for a node based on its category."""
+        if category == "input":
+            if "prompt" in title.lower():
+                return {
+                    "prompt": ("multiline", "A beautiful landscape"),
+                    "negative_prompt": ("text", ""),
+                }
+            elif "image" in title.lower():
+                return {
+                    "file_path": ("text", ""),
+                }
+        elif category == "generation":
+            return {
+                "width": ("int", 1024),
+                "height": ("int", 1024),
+                "steps": ("int", 30),
+                "cfg_scale": ("float", 7.5),
+                "sampler": ("choice:euler,euler_a,dpm++2m,ddim", "euler_a"),
+                "seed": ("seed", -1),
+            }
+        elif category == "enhancement":
+            return {
+                "scale": ("choice:2x,4x", "2x"),
+                "model": ("choice:RealESRGAN,ESRGAN", "RealESRGAN"),
+            }
+        elif category == "output":
+            if "save" in title.lower():
+                return {
+                    "output_path": ("text", ""),
+                    "format": ("choice:png,jpg,webp", "png"),
+                    "quality": ("int", 95),
+                }
+        
+        return {}

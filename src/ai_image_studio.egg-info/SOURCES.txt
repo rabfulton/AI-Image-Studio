@@ -11,6 +11,7 @@ src/ai_image_studio.egg-info/requires.txt
 src/ai_image_studio.egg-info/top_level.txt
 src/ai_image_studio/core/__init__.py
 src/ai_image_studio/core/data_types.py
+src/ai_image_studio/core/execution.py
 src/ai_image_studio/core/graph.py
 src/ai_image_studio/core/node_types.py
 src/ai_image_studio/core/project.py
@@ -31,6 +32,9 @@ src/ai_image_studio/ui/dialogs/__init__.py
 src/ai_image_studio/ui/node_graph/__init__.py
 src/ai_image_studio/ui/node_graph/canvas.py
 src/ai_image_studio/ui/output_studio/__init__.py
+src/ai_image_studio/ui/output_studio/canvas.py
 src/ai_image_studio/ui/panels/__init__.py
+src/ai_image_studio/ui/panels/node_library.py
+src/ai_image_studio/ui/panels/properties.py
 src/ai_image_studio/ui/widgets/__init__.py
 src/ai_image_studio/utils/__init__.py

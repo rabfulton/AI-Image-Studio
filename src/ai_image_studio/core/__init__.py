@@ -52,6 +52,15 @@ from ai_image_studio.core.project import (
     ProjectSettings,
 )
 
+from ai_image_studio.core.execution import (
+    ExecutionContext,
+    ExecutionEngine,
+    ExecutionJob,
+    ExecutionProgress,
+    ExecutionStatus,
+    get_engine,
+)
+
 
 __all__ = [
     # graph.py
@@ -90,4 +99,11 @@ __all__ = [
     "Project",
     "ProjectManager",
     "ProjectSettings",
+    # execution.py
+    "ExecutionContext",
+    "ExecutionEngine",
+    "ExecutionJob",
+    "ExecutionProgress",
+    "ExecutionStatus",
+    "get_engine",
 ]
