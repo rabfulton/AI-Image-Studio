@@ -1,0 +1,124 @@
+Metadata-Version: 2.4
+Name: ai-image-studio
+Version: 0.1.0
+Summary: A powerful, Linux-native AI image generation and editing application
+Author: AI Image Studio Contributors
+License: MIT
+Project-URL: Homepage, https://github.com/example/ai-image-studio
+Project-URL: Documentation, https://github.com/example/ai-image-studio/docs
+Project-URL: Repository, https://github.com/example/ai-image-studio
+Keywords: ai,image,generation,stable-diffusion,node-editor,qt
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Environment :: X11 Applications :: Qt
+Classifier: Intended Audience :: End Users/Desktop
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Multimedia :: Graphics
+Classifier: Topic :: Multimedia :: Graphics :: Editors
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: PySide6>=6.6.0
+Requires-Dist: PyOpenGL>=3.1.0
+Requires-Dist: Pillow>=10.0.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: aiohttp>=3.9.0
+Requires-Dist: msgpack>=1.0.0
+Provides-Extra: ai
+Requires-Dist: torch>=2.0.0; extra == "ai"
+Requires-Dist: diffusers>=0.25.0; extra == "ai"
+Requires-Dist: transformers>=4.35.0; extra == "ai"
+Requires-Dist: accelerate>=0.25.0; extra == "ai"
+Requires-Dist: safetensors>=0.4.0; extra == "ai"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.0; extra == "dev"
+Requires-Dist: pytest-qt>=4.2.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.7.0; extra == "dev"
+Provides-Extra: all
+Requires-Dist: ai-image-studio[ai,dev]; extra == "all"
+
+# AI Image Studio
+
+A powerful, Linux-native AI image generation and editing application.
+
+## Features
+
+- **Node-based workflows** - Build flexible, reproducible image processing pipelines
+- **Output Studio** - Compare, blend, and refine generated images
+- **Universal model support** - Local models (Diffusers, SDXL) and hosted APIs (OpenAI, Stability AI)
+- **600+ filters** - G'MIC integration for non-AI image processing
+- **Batch processing** - Automate workflows with scripting and batch operations
+
+## Requirements
+
+- Python 3.11+
+- Qt6 / PySide6
+- CUDA-compatible GPU (recommended for local AI models)
+- libgmic (optional, for G'MIC filters)
+
+## Installation
+
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run application
+python -m ai_image_studio
+```
+
+## Development
+
+```bash
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest
+
+# Run linting
+ruff check src/
+```
+
+## Project Structure
+
+```
+ai_image_studio/
+├── src/                    # Source code
+│   ├── core/              # Core data structures and execution
+│   ├── providers/         # AI model providers
+│   ├── nodes/             # Node type implementations
+│   ├── filters/           # G'MIC integration
+│   ├── scripting/         # Scripting engine
+│   ├── ui/                # User interface
+│   ├── state/             # State management
+│   └── utils/             # Utilities
+├── resources/             # Icons, themes, templates
+├── tests/                 # Test suite
+└── docs/                  # Documentation
+```
+
+## Documentation
+
+See the `docs/` directory for:
+- [Design Document](design.md) - Vision and decisions
+- [Architecture](architecture.md) - Technical structure
+- [Features](features.md) - Detailed specifications
+- [Wireframes](wireframes.md) - UI mockups
+
+## License
+
+TBD
+
+## Status
+
+🚧 **In Development** - Phase 0: Project Setup

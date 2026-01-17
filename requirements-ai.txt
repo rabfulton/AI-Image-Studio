@@ -1,0 +1,14 @@
+# AI dependencies (large downloads!)
+# Install separately when ready for AI features:
+#   pip install -r requirements-ai.txt
+
+# PyTorch (~2GB)
+torch>=2.0.0
+
+# Diffusers and transformers (~500MB)
+diffusers>=0.25.0
+transformers>=4.35.0
+
+# Utilities
+accelerate>=0.25.0
+safetensors>=0.4.0

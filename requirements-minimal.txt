@@ -1,0 +1,18 @@
+# Minimal dependencies for UI development
+# Use this to start development without heavy AI downloads
+
+# Qt6 for UI
+PySide6>=6.6.0
+
+# OpenGL for custom canvas rendering
+PyOpenGL>=3.1.0
+
+# Image handling (lightweight)
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Async HTTP (for API providers later)
+aiohttp>=3.9.0
+
+# Serialization
+msgpack>=1.0.0

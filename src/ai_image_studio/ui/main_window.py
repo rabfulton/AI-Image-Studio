@@ -140,24 +140,18 @@ class MainWindow(QMainWindow):
     
     def _setup_central_widget(self) -> None:
         """Create the central widget with Node Graph and Output Studio."""
+        from ai_image_studio.ui.node_graph import NodeGraphCanvas
+        
         # Create main splitter
         self._main_splitter = QSplitter(Qt.Orientation.Horizontal)
         
-        # Placeholder for Node Graph Canvas
-        node_graph_placeholder = QWidget()
-        node_graph_layout = QVBoxLayout(node_graph_placeholder)
-        node_graph_label = QLabel("Node Graph Canvas")
-        node_graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        node_graph_label.setStyleSheet("""
-            QLabel {
-                background-color: #1a1a2e;
-                color: #808080;
-                font-size: 24px;
-                border: 1px solid #333;
-            }
-        """)
-        node_graph_layout.addWidget(node_graph_label)
-        node_graph_layout.setContentsMargins(0, 0, 0, 0)
+        # Node Graph Canvas (real widget)
+        self._node_graph_canvas = NodeGraphCanvas()
+        self._node_graph_canvas.node_selected.connect(self._on_node_selected)
+        self._node_graph_canvas.context_menu_requested.connect(self._on_canvas_context_menu)
+        
+        # Add some demo nodes
+        self._add_demo_nodes()
         
         # Placeholder for Output Studio
         output_studio_placeholder = QWidget()
@@ -176,11 +170,84 @@ class MainWindow(QMainWindow):
         output_studio_layout.setContentsMargins(0, 0, 0, 0)
         
         # Add to splitter
-        self._main_splitter.addWidget(node_graph_placeholder)
+        self._main_splitter.addWidget(self._node_graph_canvas)
         self._main_splitter.addWidget(output_studio_placeholder)
         self._main_splitter.setSizes([600, 400])
         
         self.setCentralWidget(self._main_splitter)
+    
+    def _add_demo_nodes(self) -> None:
+        """Add demo nodes to showcase the canvas."""
+        # Prompt node
+        self._node_graph_canvas.add_visual_node(
+            node_id="node_1",
+            x=50, y=100,
+            title="Prompt",
+            category="input",
+            inputs=[],
+            outputs=[("text", "TEXT")],
+        )
+        
+        # Text-to-Image node
+        self._node_graph_canvas.add_visual_node(
+            node_id="node_2",
+            x=300, y=80,
+            title="Text to Image",
+            category="generation",
+            inputs=[("prompt", "TEXT"), ("negative", "TEXT"), ("model", "MODEL")],
+            outputs=[("image", "IMAGE"), ("latent", "LATENT")],
+        )
+        
+        # Preview node
+        self._node_graph_canvas.add_visual_node(
+            node_id="node_3",
+            x=580, y=100,
+            title="Preview",
+            category="output",
+            inputs=[("image", "IMAGE")],
+            outputs=[],
+        )
+        
+        # Connect prompt to text-to-image to preview
+        self._node_graph_canvas.add_visual_connection("node_1", "text", "node_2", "prompt")
+        self._node_graph_canvas.add_visual_connection("node_2", "image", "node_3", "image")
+    
+    def _on_node_selected(self, node_id) -> None:
+        """Handle node selection."""
+        if node_id:
+            self.statusBar().showMessage(f"Selected: {node_id}", 2000)
+    
+    def _on_canvas_context_menu(self, x: float, y: float) -> None:
+        """Handle canvas context menu."""
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtGui import QCursor
+        
+        menu = QMenu(self)
+        
+        # Add node submenu
+        add_menu = menu.addMenu("Add Node")
+        
+        # Input nodes
+        input_menu = add_menu.addMenu("Input")
+        input_menu.addAction("Prompt")
+        input_menu.addAction("Image Input")
+        input_menu.addAction("Mask Input")
+        
+        # Generation nodes
+        gen_menu = add_menu.addMenu("Generation")
+        gen_menu.addAction("Text to Image")
+        gen_menu.addAction("Image to Image")
+        gen_menu.addAction("Inpaint")
+        
+        # Output nodes
+        out_menu = add_menu.addMenu("Output")
+        out_menu.addAction("Preview")
+        out_menu.addAction("Save Image")
+        
+        menu.addSeparator()
+        menu.addAction("Frame All (F)")
+        
+        menu.exec(QCursor.pos())
     
     def _setup_dock_widgets(self) -> None:
         """Create dock widgets for panels."""
