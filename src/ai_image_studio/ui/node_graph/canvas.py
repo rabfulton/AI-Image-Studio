@@ -130,8 +130,9 @@ class NodeGraphCanvas(QWidget):
     # Signals
     node_selected = Signal(object)  # NodeId or None
     node_moved = Signal(object, float, float)  # NodeId, x, y
+    node_deleted = Signal(object)  # NodeId - emitted when user deletes a node
     connection_created = Signal(object, str, object, str)  # src_id, src_out, tgt_id, tgt_in
-    connection_removed = Signal(object)  # ConnectionId
+    connection_removed = Signal(object, str, object, str)  # src_id, src_out, tgt_id, tgt_in
     context_menu_requested = Signal(float, float)  # canvas x, y
     
     # Layout constants
@@ -156,6 +157,7 @@ class NodeGraphCanvas(QWidget):
         
         # Interaction state
         self._selected_nodes: set[str] = set()
+        self._selected_connection: tuple[str, str, str, str] | None = None  # Selected conn for deletion
         self._hovered_node: str | None = None
         self._hovered_socket: tuple[str, str, bool] | None = None  # (node_id, socket_name, is_output)
         
@@ -243,6 +245,7 @@ class NodeGraphCanvas(QWidget):
             outputs=outputs or [],
         )
         self._nodes[node_id] = visual
+        print(f"DEBUG add_visual_node: id={node_id[:8]}, category={category}, visual.category={visual.category}")
         self.update()
     
     def remove_visual_node(self, node_id: str) -> None:
@@ -266,6 +269,41 @@ class NodeGraphCanvas(QWidget):
     ) -> None:
         """Add a visual connection."""
         self._connections.append((source_node, source_output, target_node, target_input))
+        self.update()
+    
+    def remove_visual_connection(
+        self,
+        source_node: str,
+        source_output: str,
+        target_node: str,
+        target_input: str,
+    ) -> None:
+        """Remove a visual connection."""
+        conn = (source_node, source_output, target_node, target_input)
+        if conn in self._connections:
+            self._connections.remove(conn)
+            self.connection_removed.emit(source_node, source_output, target_node, target_input)
+            self.update()
+    
+    def delete_selected_nodes(self) -> None:
+        """Delete all currently selected nodes."""
+        for node_id in list(self._selected_nodes):
+            # Remove connections first
+            conns_to_remove = [
+                c for c in self._connections
+                if c[0] == node_id or c[2] == node_id
+            ]
+            for conn in conns_to_remove:
+                self._connections.remove(conn)
+                self.connection_removed.emit(*conn)
+            
+            # Remove node
+            if node_id in self._nodes:
+                del self._nodes[node_id]
+            self._selected_nodes.discard(node_id)
+            self.node_deleted.emit(node_id)
+        
+        self.node_selected.emit(None)
         self.update()
     
     def select_node(self, node_id: str | None, add: bool = False) -> None:
@@ -331,7 +369,8 @@ class NodeGraphCanvas(QWidget):
         
         # Connections
         for conn in self._connections:
-            self._draw_connection(painter, *conn)
+            is_selected = (conn == self._selected_connection)
+            self._draw_connection(painter, *conn, is_selected=is_selected)
         
         # Connection being dragged
         if self._is_dragging_connection and self._connection_start and self._connection_end_pos:
@@ -375,6 +414,8 @@ class NodeGraphCanvas(QWidget):
     
     def _draw_node(self, painter: QPainter, node: VisualNode) -> None:
         """Draw a single node."""
+        painter.save()  # Isolate painter state per node
+        
         # Transform to screen coordinates
         sx, sy = self._transform.canvas_to_screen(node.x, node.y)
         sw = node.width * self._transform.zoom
@@ -404,6 +445,7 @@ class NodeGraphCanvas(QWidget):
         header_path.closeSubpath()
         
         header_color = NODE_COLORS.get(node.category, NODE_COLORS["default"])
+        print(f"DEBUG _draw_node: {node.title}, cat={node.category}, color={header_color.name()}")
         painter.fillPath(header_path, header_color)
         
         # Border
@@ -462,6 +504,8 @@ class NodeGraphCanvas(QWidget):
             painter.setPen(QColor("#cccccc"))
             label_rect = QRectF(sx + sw/2, y - socket_spacing/2, sw/2 - socket_radius - 4, socket_spacing)
             painter.drawText(label_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, name)
+        
+        painter.restore()  # Restore painter state
     
     def _draw_connection(
         self,
@@ -470,6 +514,7 @@ class NodeGraphCanvas(QWidget):
         src_output: str,
         tgt_node: str,
         tgt_input: str,
+        is_selected: bool = False,
     ) -> None:
         """Draw a connection between two nodes."""
         if src_node not in self._nodes or tgt_node not in self._nodes:
@@ -489,7 +534,12 @@ class NodeGraphCanvas(QWidget):
         sx, sy = self._transform.canvas_to_screen(*src_pos)
         tx, ty = self._transform.canvas_to_screen(*tgt_pos)
         
-        self._draw_bezier_connection(painter, sx, sy, tx, ty, QColor("#888888"))
+        # Use highlight color if selected
+        if is_selected:
+            color = self._selection_color
+            self._draw_bezier_connection(painter, sx, sy, tx, ty, color, width=3)
+        else:
+            self._draw_bezier_connection(painter, sx, sy, tx, ty, QColor("#888888"))
     
     def _draw_temp_connection(self, painter: QPainter) -> None:
         """Draw the connection being dragged."""
@@ -520,6 +570,7 @@ class NodeGraphCanvas(QWidget):
         x1: float, y1: float,
         x2: float, y2: float,
         color: QColor,
+        width: int = 2,
     ) -> None:
         """Draw a bezier curve connection."""
         path = QPainterPath()
@@ -531,7 +582,7 @@ class NodeGraphCanvas(QWidget):
         
         path.cubicTo(x1 + dx, y1, x2 - dx, y2, x2, y2)
         
-        pen = QPen(color, 2)
+        pen = QPen(color, width)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(path)
@@ -617,6 +668,47 @@ class NodeGraphCanvas(QWidget):
         
         return None
     
+    def _connection_at(
+        self,
+        canvas_x: float,
+        canvas_y: float,
+        threshold: float = 15.0,
+    ) -> tuple[str, str, str, str] | None:
+        """Get the connection at canvas coordinates (for click-to-select)."""
+        for conn in self._connections:
+            src_id, src_out, tgt_id, tgt_in = conn
+            
+            if src_id not in self._nodes or tgt_id not in self._nodes:
+                continue
+            
+            src_node = self._nodes[src_id]
+            tgt_node = self._nodes[tgt_id]
+            
+            # Find source socket position
+            src_pos = self._get_socket_position(src_node, src_out, is_output=True)
+            tgt_pos = self._get_socket_position(tgt_node, tgt_in, is_output=False)
+            
+            if not src_pos or not tgt_pos:
+                continue
+            
+            src_x, src_y = src_pos
+            tgt_x, tgt_y = tgt_pos
+            
+            # Match control point calculation from _draw_bezier_connection
+            dx = abs(tgt_x - src_x) * 0.5
+            dx = max(dx, 50)  # Minimum curvature
+            
+            # Check distance to bezier curve using more sample points
+            for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+                # Cubic bezier point
+                bx = (1-t)**3 * src_x + 3*(1-t)**2*t*(src_x + dx) + 3*(1-t)*t**2*(tgt_x - dx) + t**3*tgt_x
+                by = (1-t)**3 * src_y + 3*(1-t)**2*t*src_y + 3*(1-t)*t**2*tgt_y + t**3*tgt_y
+                
+                if math.hypot(canvas_x - bx, canvas_y - by) < threshold:
+                    return conn
+        
+        return None
+    
     # --- Mouse Events ---
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -642,14 +734,17 @@ class NodeGraphCanvas(QWidget):
             # Check for socket hit first
             socket = self._socket_at(cx, cy)
             if socket:
+                self._selected_connection = None  # Deselect connection
                 self._is_dragging_connection = True
                 self._connection_start = socket
                 self._connection_end_pos = (pos.x(), pos.y())
+                self.update()
                 return
             
             # Check for node hit
             node_id = self._node_at(cx, cy)
             if node_id:
+                self._selected_connection = None  # Deselect connection
                 # Select node
                 if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
                     # Toggle selection
@@ -666,9 +761,19 @@ class NodeGraphCanvas(QWidget):
                 # Start drag
                 self._is_dragging_node = True
                 self._drag_start_pos = pos
+                self.update()
+                return
+            
+            # Check for connection hit
+            conn = self._connection_at(cx, cy)
+            if conn:
+                self._selected_connection = conn
+                self.select_node(None)  # Deselect nodes
+                self.update()
                 return
             
             # Click on empty space - start selection box or deselect
+            self._selected_connection = None
             if not (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
                 self.select_node(None)
             
@@ -807,10 +912,16 @@ class NodeGraphCanvas(QWidget):
     
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press."""
-        if event.key() == Qt.Key.Key_Delete:
-            # Delete selected nodes
-            for node_id in list(self._selected_nodes):
-                self.remove_visual_node(node_id)
+        if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
+            # Delete selected connection first, then nodes
+            if self._selected_connection:
+                conn = self._selected_connection
+                self._connections.remove(conn)
+                self.connection_removed.emit(*conn)
+                self._selected_connection = None
+                self.update()
+            elif self._selected_nodes:
+                self.delete_selected_nodes()
         elif event.key() == Qt.Key.Key_F:
             # Frame all
             self.frame_all()

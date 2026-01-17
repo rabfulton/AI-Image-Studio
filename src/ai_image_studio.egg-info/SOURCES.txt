@@ -25,6 +25,7 @@ src/ai_image_studio/nodes/generation/text_to_image.py
 src/ai_image_studio/nodes/input/__init__.py
 src/ai_image_studio/nodes/input/prompt.py
 src/ai_image_studio/nodes/output/__init__.py
+src/ai_image_studio/nodes/output/preview.py
 src/ai_image_studio/nodes/utility/__init__.py
 src/ai_image_studio/providers/__init__.py
 src/ai_image_studio/providers/base.py

@@ -95,6 +95,13 @@ TEXT_TO_IMAGE_NODE = NodeType(
             description="Text prompt describing the image",
             required=False,  # Can also use parameter
         ),
+        InputDefinition(
+            name="negative_prompt",
+            label="Negative Prompt",
+            data_type=DataType.TEXT,
+            description="What to avoid in the image (for models that support it)",
+            required=False,
+        ),
     ],
     outputs=[
         OutputDefinition(

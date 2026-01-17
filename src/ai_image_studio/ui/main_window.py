@@ -428,8 +428,44 @@ class MainWindow(QMainWindow):
         # Connection created - sync to NodeGraph
         self._node_graph_canvas.connection_created.connect(self._on_connection_created)
         
+        # Connection removed - sync to NodeGraph
+        self._node_graph_canvas.connection_removed.connect(self._on_connection_removed)
+        
+        # Node deleted - sync to NodeGraph
+        self._node_graph_canvas.node_deleted.connect(self._on_node_deleted)
+        
         # Node moved - sync position to core Node
         self._node_graph_canvas.node_moved.connect(self._on_node_moved)
+    
+    def _on_node_deleted(self, node_id: str) -> None:
+        """Handle node deletion from canvas - sync to core NodeGraph."""
+        if node_id in self._node_id_map:
+            core_id = self._node_id_map[node_id]
+            self._graph.remove_node(core_id)
+            del self._node_id_map[node_id]
+            self._console_panel.log_info(f"Deleted node: {node_id[:8]}...")
+    
+    def _on_connection_removed(
+        self,
+        src_node_id: str,
+        src_output: str,
+        tgt_node_id: str,
+        tgt_input: str,
+    ) -> None:
+        """Handle connection removal from canvas - sync to core NodeGraph."""
+        src_core_id = self._node_id_map.get(src_node_id)
+        tgt_core_id = self._node_id_map.get(tgt_node_id)
+        
+        if src_core_id and tgt_core_id:
+            # Find and remove the connection
+            for conn in list(self._graph.connections):
+                if (conn.source.node_id == src_core_id and 
+                    conn.source.output_name == src_output and
+                    conn.target.node_id == tgt_core_id and
+                    conn.target.input_name == tgt_input):
+                    self._graph.remove_connection(conn.id)
+                    self._console_panel.log_info(f"Disconnected {src_output} → {tgt_input}")
+                    break
     
     def _on_connection_created(
         self,
@@ -822,6 +858,8 @@ class MainWindow(QMainWindow):
         # Parse type_id for display
         parts = type_id.split(".")
         category = parts[0] if parts else "utility"
+        
+        print(f"DEBUG _on_add_node_requested: type_id={type_id}, category={category}")
         
         # Get title and IO from node type if available
         if node_type:

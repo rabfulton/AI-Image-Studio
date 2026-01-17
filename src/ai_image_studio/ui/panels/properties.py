@@ -145,6 +145,11 @@ class PropertiesPanel(QWidget):
             if parameters:
                 for name, value in parameters.items():
                     self._add_simple_parameter(name, value)
+        
+        # Load dynamic model params if we have a model selected
+        if self._pending_model_id:
+            self._update_model_params(self._pending_model_id)
+            self._pending_model_id = None
     
     def set_simple_properties(
         self,
@@ -532,10 +537,14 @@ class PropertiesPanel(QWidget):
     
     def _update_model_params(self, model_id: str | None) -> None:
         """Update dynamic parameters based on selected model's ModelCard."""
-        # Remove existing dynamic model param widgets
-        for widget in self._model_param_widgets.values():
-            widget.deleteLater()
-        self._model_param_widgets.clear()
+        # Safely remove existing dynamic model param widgets
+        for key in list(self._model_param_widgets.keys()):
+            widget = self._model_param_widgets.pop(key, None)
+            if widget is not None:
+                try:
+                    widget.deleteLater()
+                except RuntimeError:
+                    pass  # Widget already deleted
         
         if not model_id:
             return
