@@ -278,15 +278,17 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self._properties_dock, self._gallery_dock)
         self._properties_dock.raise_()  # Show properties by default
         
-        # History dock (bottom)
-        self._history_dock = QDockWidget("History", self)
-        self._history_dock.setAllowedAreas(
+        # Console dock (bottom) - replaces History placeholder
+        from ai_image_studio.ui.panels import ConsolePanel
+        
+        self._console_dock = QDockWidget("Console", self)
+        self._console_dock.setAllowedAreas(
             Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.TopDockWidgetArea
         )
-        history_placeholder = QLabel("History (Undo/Redo states)")
-        history_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._history_dock.setWidget(history_placeholder)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._history_dock)
+        self._console_panel = ConsolePanel()
+        self._console_panel.cancel_requested.connect(self._on_cancel_execution)
+        self._console_dock.setWidget(self._console_panel)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._console_dock)
         
         # Queue dock (bottom)
         self._queue_dock = QDockWidget("Queue", self)
@@ -298,15 +300,15 @@ class MainWindow(QMainWindow):
         self._queue_dock.setWidget(queue_placeholder)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._queue_dock)
         
-        # Tab history and queue together
-        self.tabifyDockWidget(self._history_dock, self._queue_dock)
-        self._history_dock.raise_()
+        # Tab console and queue together
+        self.tabifyDockWidget(self._console_dock, self._queue_dock)
+        self._console_dock.raise_()
         
         # Add toggle actions to View menu
         self._view_menu.addAction(self._node_library_dock.toggleViewAction())
         self._view_menu.addAction(self._properties_dock.toggleViewAction())
         self._view_menu.addAction(self._gallery_dock.toggleViewAction())
-        self._view_menu.addAction(self._history_dock.toggleViewAction())
+        self._view_menu.addAction(self._console_dock.toggleViewAction())
         self._view_menu.addAction(self._queue_dock.toggleViewAction())
     
     def _setup_status_bar(self) -> None:
@@ -395,22 +397,136 @@ class MainWindow(QMainWindow):
     
     def _on_execute_workflow(self) -> None:
         """Execute the current workflow."""
-        # TODO: Implement workflow execution
-        self.statusBar().showMessage("Executing workflow...", 3000)
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+        
+        self._console_panel.log_info("Starting workflow execution...")
+        
+        # Check if we have any generation nodes selected or use first generation node
+        nodes = list(self._node_graph_canvas._nodes.values())
+        gen_nodes = [n for n in nodes if "text to image" in n.title.lower()]
+        
+        if not gen_nodes:
+            self._console_panel.log_warning("No Text to Image nodes found. Add one to generate images.")
+            return
+        
+        # Get parameters from first generation node
+        node = gen_nodes[0]
+        type_id = self._get_type_id_for_node(node)
+        
+        from ai_image_studio.core.node_types import NodeRegistry
+        node_type = NodeRegistry.instance().get(type_id) if type_id else None
+        
+        if not node_type:
+            self._console_panel.log_error(f"Node type not found: {type_id}")
+            return
+        
+        # Get default parameters (in real impl, would get actual node params)
+        params = node_type.get_default_parameters()
+        
+        self._console_panel.set_job(f"Generating: {node.title}")
+        self._console_panel.set_status("Preparing request...")
+        self._console_panel.set_progress(10)
+        
+        # Run async generation in thread pool
+        def run_generation():
+            return asyncio.run(self._execute_generation(params))
+        
+        from PySide6.QtCore import QThreadPool, QRunnable, QObject, Signal
+        
+        class WorkerSignals(QObject):
+            finished = Signal(object)
+            error = Signal(str)
+            progress = Signal(int, str)
+        
+        class GenerationWorker(QRunnable):
+            def __init__(self, params, window):
+                super().__init__()
+                self.params = params
+                self.window = window
+                self.signals = WorkerSignals()
+            
+            def run(self):
+                try:
+                    result = asyncio.run(self.window._execute_generation(self.params))
+                    self.signals.finished.emit(result)
+                except Exception as e:
+                    self.signals.error.emit(str(e))
+        
+        worker = GenerationWorker(params, self)
+        worker.signals.finished.connect(self._on_generation_finished)
+        worker.signals.error.connect(self._on_generation_error)
+        
+        QThreadPool.globalInstance().start(worker)
+    
+    async def _execute_generation(self, params: dict):
+        """Execute the actual generation."""
+        from ai_image_studio.providers import get_registry, GenerationRequest
+        
+        registry = get_registry()
+        
+        model_id = params.get("model", "dall-e-3")
+        model = registry.get_model(model_id)
+        
+        if not model:
+            raise ValueError(f"Model not found: {model_id}")
+        
+        provider = registry.get_provider(model.provider)
+        if not provider or not provider.is_configured:
+            raise ValueError(f"Provider {model.provider} not configured. Go to Providers → Manage Providers.")
+        
+        prompt = params.get("prompt", "A beautiful landscape")
+        
+        request = GenerationRequest(
+            model=model,
+            prompt=prompt,
+            width=params.get("width", 1024),
+            height=params.get("height", 1024),
+        )
+        
+        result = await provider.generate(request)
+        return result
+    
+    def _on_generation_finished(self, result) -> None:
+        """Handle successful generation."""
+        self._console_panel.log_success(f"Generation complete! {len(result.images)} image(s) generated.")
+        self._console_panel.set_progress(100)
+        self._console_panel.set_status("Complete")
+        
+        if result.revised_prompt:
+            self._console_panel.log_info(f"Revised prompt: {result.revised_prompt}")
+        
+        # Display image in output studio
+        if result.images:
+            self._output_studio.set_image_from_data(result.images[0])
+            self._console_panel.log_info("Image displayed in Output Studio")
+        
+        self._console_panel.clear_progress()
+        self.statusBar().showMessage("Generation complete!", 5000)
+    
+    def _on_generation_error(self, error: str) -> None:
+        """Handle generation error."""
+        self._console_panel.log_error(f"Generation failed: {error}")
+        self._console_panel.clear_progress()
+        self.statusBar().showMessage("Generation failed", 5000)
     
     def _on_cancel_execution(self) -> None:
         """Cancel the current execution."""
-        # TODO: Implement execution cancellation
+        self._console_panel.log_warning("Execution cancelled by user")
+        self._console_panel.clear_progress()
         self.statusBar().showMessage("Execution cancelled", 2000)
     
     def _on_manage_providers(self) -> None:
         """Open the provider management dialog."""
-        # TODO: Implement provider management
-        QMessageBox.information(
-            self,
-            "Providers",
-            "Provider management not yet implemented."
-        )
+        from ai_image_studio.ui.dialogs import ProviderSettingsDialog
+        
+        dialog = ProviderSettingsDialog(self)
+        dialog.settings_changed.connect(self._on_provider_settings_changed)
+        dialog.exec()
+    
+    def _on_provider_settings_changed(self) -> None:
+        """Handle provider settings changes."""
+        self.statusBar().showMessage("Provider settings saved", 3000)
     
     def _on_about(self) -> None:
         """Show the about dialog."""
@@ -492,17 +608,46 @@ class MainWindow(QMainWindow):
             
             # Get node info from canvas
             if node_id in self._node_graph_canvas._nodes:
-                node = self._node_graph_canvas._nodes[node_id]
+                visual_node = self._node_graph_canvas._nodes[node_id]
                 
-                # Show sample properties based on category
-                props = self._get_default_properties(node.category, node.title)
-                self._properties_panel.set_simple_properties(
-                    node_id=node_id,
-                    title=node.title,
-                    properties=props,
-                )
+                # Try to get actual NodeType from registry
+                from ai_image_studio.core.node_types import NodeRegistry
+                
+                # Map visual node to a type_id
+                type_id = self._get_type_id_for_node(visual_node)
+                node_type = NodeRegistry.instance().get(type_id) if type_id else None
+                
+                if node_type and node_type.parameters:
+                    # Use actual parameter definitions
+                    self._properties_panel.set_node(
+                        node_id=node_id,
+                        title=visual_node.title,
+                        parameters=node_type.get_default_parameters(),
+                        definitions=node_type.parameters,
+                    )
+                else:
+                    # Fall back to demo properties
+                    props = self._get_default_properties(visual_node.category, visual_node.title)
+                    self._properties_panel.set_simple_properties(
+                        node_id=node_id,
+                        title=visual_node.title,
+                        properties=props,
+                    )
         else:
             self._properties_panel.set_node(None)
+    
+    def _get_type_id_for_node(self, visual_node) -> str | None:
+        """Map a visual node to its NodeType ID."""
+        # Map by title/category to type_id
+        title_lower = visual_node.title.lower()
+        
+        if "text to image" in title_lower:
+            return "generation.text_to_image"
+        elif "image to image" in title_lower:
+            return "generation.image_to_image"
+        
+        # Could add more mappings here
+        return None
     
     def _get_default_properties(self, category: str, title: str) -> dict:
         """Get default properties for a node based on its category."""

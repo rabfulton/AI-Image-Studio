@@ -328,8 +328,38 @@ class PropertiesPanel(QWidget):
             layout.addWidget(random_btn)
             widget = container
         
+        elif param_def.param_type == ParameterType.MODEL:
+            # Dynamic model selector - populates from providers
+            widget = QComboBox()
+            
+            # Get available models from provider registry
+            try:
+                from ai_image_studio.providers import get_registry
+                registry = get_registry()
+                
+                # First try configured providers only
+                models = registry.list_available_models()
+                if not models:
+                    # Fall back to all models
+                    models = registry.list_models()
+                
+                for model in models:
+                    widget.addItem(f"{model.name} ({model.provider})", model.id)
+                
+            except ImportError:
+                pass  # Providers not available
+            
+            if value:
+                idx = widget.findData(value)
+                if idx >= 0:
+                    widget.setCurrentIndex(idx)
+            
+            widget.currentIndexChanged.connect(
+                lambda idx, n=name: self._on_value_changed(n, widget.currentData())
+            )
+        
         else:
-            # Default text input
+            # Default text input for unknown types
             widget = QLineEdit()
             widget.setText(str(value) if value else "")
             widget.textChanged.connect(

@@ -24,6 +24,11 @@ def main() -> int:
     from PySide6.QtWidgets import QApplication
     from PySide6.QtCore import Qt
     
+    # Enable high DPI scaling BEFORE creating QApplication
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
+    
     # Import our main window
     from ai_image_studio.ui.main_window import MainWindow
     
@@ -33,10 +38,13 @@ def main() -> int:
     app.setApplicationVersion("0.1.0")
     app.setOrganizationName("AI Image Studio")
     
-    # Enable high DPI scaling
-    app.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
+    # Load provider configuration from disk
+    from ai_image_studio.providers import get_registry
+    get_registry().load_config()
+    
+    # Register built-in nodes
+    from ai_image_studio.nodes import register_all_nodes
+    register_all_nodes()
     
     # Create and show main window
     window = MainWindow()

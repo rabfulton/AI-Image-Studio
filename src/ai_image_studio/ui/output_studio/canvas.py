@@ -570,10 +570,32 @@ class OutputStudio(QWidget):
         layout.addWidget(self._status_bar)
     
     def set_image(self, image: QImage) -> None:
-        """Set the main image to display."""
+        """Set the main image to display (QImage)."""
         self._single_canvas.set_image(image)
         self._comparison_canvas.set_after_image(image)
         self._update_info(image)
+    
+    def set_image_from_data(self, image_data) -> None:
+        """Set the main image from an ImageData object."""
+        if image_data is None:
+            self._single_canvas.set_image(None)
+            self._info_label.setText("No image")
+            return
+        
+        # Convert ImageData to QImage via PIL
+        pil_img = image_data.to_pil()
+        
+        if pil_img.mode == "RGBA":
+            data = pil_img.tobytes("raw", "RGBA")
+            qimg = QImage(data, pil_img.width, pil_img.height, QImage.Format.Format_RGBA8888)
+        else:
+            pil_img = pil_img.convert("RGB")
+            data = pil_img.tobytes("raw", "RGB")
+            qimg = QImage(data, pil_img.width, pil_img.height, QImage.Format.Format_RGB888)
+        
+        # Must copy - data goes out of scope
+        self._single_canvas.set_image(qimg.copy())
+        self._update_info(qimg)
     
     def set_before_image(self, image: QImage) -> None:
         """Set the 'before' image for comparison."""
