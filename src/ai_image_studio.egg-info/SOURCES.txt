@@ -22,6 +22,7 @@ src/ai_image_studio/nodes/filter/__init__.py
 src/ai_image_studio/nodes/generation/__init__.py
 src/ai_image_studio/nodes/generation/text_to_image.py
 src/ai_image_studio/nodes/input/__init__.py
+src/ai_image_studio/nodes/input/prompt.py
 src/ai_image_studio/nodes/output/__init__.py
 src/ai_image_studio/nodes/utility/__init__.py
 src/ai_image_studio/providers/__init__.py
@@ -42,6 +43,7 @@ src/ai_image_studio/ui/output_studio/__init__.py
 src/ai_image_studio/ui/output_studio/canvas.py
 src/ai_image_studio/ui/panels/__init__.py
 src/ai_image_studio/ui/panels/console.py
+src/ai_image_studio/ui/panels/gallery.py
 src/ai_image_studio/ui/panels/node_library.py
 src/ai_image_studio/ui/panels/properties.py
 src/ai_image_studio/ui/widgets/__init__.py

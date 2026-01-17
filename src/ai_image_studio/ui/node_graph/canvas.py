@@ -109,6 +109,7 @@ class VisualNode:
     category: str
     inputs: list[tuple[str, str]]   # (name, data_type)
     outputs: list[tuple[str, str]]  # (name, data_type)
+    type_id: str = ""  # Links to NodeType.id and core Node.type_id
     is_selected: bool = False
     is_hovered: bool = False
     preview_image: object = None  # PIL Image or None
@@ -378,8 +379,9 @@ class NodeGraphCanvas(QWidget):
         sx, sy = self._transform.canvas_to_screen(node.x, node.y)
         sw = node.width * self._transform.zoom
         sh = node.height * self._transform.zoom
+        header_h = self.NODE_HEADER_HEIGHT * self._transform.zoom
         
-        # Node body
+        # Node body - rounded rect
         rect = QRectF(sx, sy, sw, sh)
         path = QPainterPath()
         path.addRoundedRect(rect, 8, 8)
@@ -388,13 +390,18 @@ class NodeGraphCanvas(QWidget):
         body_color = QColor("#2d2d3d")
         painter.fillPath(path, body_color)
         
-        # Header
-        header_rect = QRectF(sx, sy, sw, self.NODE_HEADER_HEIGHT * self._transform.zoom)
+        # Header - only top corners rounded
+        # Draw as: rounded rect at top + rectangle below to fill gap
         header_path = QPainterPath()
-        header_path.addRoundedRect(header_rect, 8, 8)
-        # Clip bottom corners
-        bottom_rect = QRectF(sx, sy + 8, sw, self.NODE_HEADER_HEIGHT * self._transform.zoom - 8)
-        header_path.addRect(bottom_rect)
+        # Full header area with top corners rounded
+        header_path.moveTo(sx + 8, sy)
+        header_path.lineTo(sx + sw - 8, sy)
+        header_path.arcTo(QRectF(sx + sw - 16, sy, 16, 16), 90, -90)  # top-right
+        header_path.lineTo(sx + sw, sy + header_h)
+        header_path.lineTo(sx, sy + header_h)
+        header_path.lineTo(sx, sy + 8)
+        header_path.arcTo(QRectF(sx, sy, 16, 16), 180, -90)  # top-left
+        header_path.closeSubpath()
         
         header_color = NODE_COLORS.get(node.category, NODE_COLORS["default"])
         painter.fillPath(header_path, header_color)
