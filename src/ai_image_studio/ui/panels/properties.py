@@ -53,6 +53,8 @@ class PropertiesPanel(QWidget):
         
         self._current_node_id: str | None = None
         self._widgets: dict[str, QWidget] = {}
+        self._model_param_widgets: dict[str, QWidget] = {}  # Dynamic model params
+        self._pending_model_id: str | None = None
         
         self._setup_ui()
     
@@ -354,9 +356,17 @@ class PropertiesPanel(QWidget):
                 if idx >= 0:
                     widget.setCurrentIndex(idx)
             
-            widget.currentIndexChanged.connect(
-                lambda idx, n=name: self._on_value_changed(n, widget.currentData())
-            )
+            # Connect to value change AND dynamic param update
+            def on_model_changed(idx, n=name, w=widget):
+                model_id = w.currentData()
+                self._on_value_changed(n, model_id)
+                self._update_model_params(model_id)
+            
+            widget.currentIndexChanged.connect(on_model_changed)
+            
+            # Initial load of model params
+            if value:
+                self._pending_model_id = value  # Set after widgets are added
         
         else:
             # Default text input for unknown types
@@ -519,3 +529,80 @@ class PropertiesPanel(QWidget):
         """Handle parameter value change."""
         if self._current_node_id:
             self.parameter_changed.emit(self._current_node_id, name, value)
+    
+    def _update_model_params(self, model_id: str | None) -> None:
+        """Update dynamic parameters based on selected model's ModelCard."""
+        # Remove existing dynamic model param widgets
+        for widget in self._model_param_widgets.values():
+            widget.deleteLater()
+        self._model_param_widgets.clear()
+        
+        if not model_id:
+            return
+        
+        # Get ModelCard
+        try:
+            from ai_image_studio.providers import get_registry
+            registry = get_registry()
+            model = registry.get_model(model_id)
+            
+            if not model or not model.param_options:
+                return
+            
+            # Create separator
+            separator = QFrame()
+            separator.setFrameShape(QFrame.Shape.HLine)
+            separator.setStyleSheet("background-color: #313244;")
+            self._params_layout.insertWidget(
+                self._params_layout.count() - 1,
+                separator
+            )
+            self._model_param_widgets["_separator"] = separator
+            
+            # Create header
+            header = QLabel(f"🎨 {model.name} Options")
+            header.setStyleSheet("color: #89b4fa; font-weight: bold; margin-top: 8px;")
+            self._params_layout.insertWidget(
+                self._params_layout.count() - 1,
+                header
+            )
+            self._model_param_widgets["_header"] = header
+            
+            # Create widgets for each param option
+            for param_name, options in model.param_options.items():
+                label = QLabel(self._format_label(param_name))
+                label.setStyleSheet("color: #a6adc8;")
+                
+                combo = QComboBox()
+                for opt in options:
+                    combo.addItem(str(opt), opt)
+                
+                # Set default if available
+                if model.param_defaults and param_name in model.param_defaults:
+                    default = model.param_defaults[param_name]
+                    idx = combo.findData(default)
+                    if idx >= 0:
+                        combo.setCurrentIndex(idx)
+                
+                combo.currentIndexChanged.connect(
+                    lambda idx, n=param_name, c=combo: self._on_value_changed(n, c.currentData())
+                )
+                
+                # Container
+                container = QWidget()
+                container_layout = QVBoxLayout(container)
+                container_layout.setContentsMargins(0, 0, 0, 0)
+                container_layout.setSpacing(4)
+                container_layout.addWidget(label)
+                container_layout.addWidget(combo)
+                
+                self._params_layout.insertWidget(
+                    self._params_layout.count() - 1,
+                    container
+                )
+                self._model_param_widgets[param_name] = container
+                
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"Error loading model params: {e}")

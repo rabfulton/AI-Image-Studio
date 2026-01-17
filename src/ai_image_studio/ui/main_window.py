@@ -324,6 +324,9 @@ class MainWindow(QMainWindow):
         if state:
             self.restoreState(state)
         
+        # Load last session workspace
+        self._load_session()
+        
         # Load saved gallery images
         count = self._gallery_panel.load_saved_images()
         if count > 0:
@@ -332,6 +335,93 @@ class MainWindow(QMainWindow):
         # Welcome message
         self._console_panel.log_info("Welcome to AI Image Studio!")
         self._console_panel.log_info("Add nodes from the Node Library, then press F5 to execute")
+    
+    def _load_session(self) -> None:
+        """Load the last session workspace if it exists."""
+        from ai_image_studio.core.workspace import load_workspace, get_last_session_path
+        from ai_image_studio.core.graph import Node, Point2D
+        from ai_image_studio.core.node_types import NodeRegistry
+        from uuid import UUID
+        
+        session_path = get_last_session_path()
+        if not session_path.exists():
+            return
+        
+        try:
+            data = load_workspace(session_path)
+            registry = NodeRegistry.instance()
+            
+            # Restore nodes
+            for node_data in data.get("nodes", []):
+                visual_id = node_data["id"]
+                type_id = node_data["type_id"]
+                x = node_data["x"]
+                y = node_data["y"]
+                params = node_data.get("parameters", {})
+                
+                # Create core node with specific ID
+                core_node = Node.create(type_id, position=Point2D(x=x, y=y))
+                # Set saved parameters
+                for key, value in params.items():
+                    core_node.set_parameter(key, value)
+                
+                self._graph.add_node(core_node)
+                self._node_id_map[visual_id] = core_node.id
+                
+                # Get node type for visual info
+                node_type = registry.get(type_id)
+                parts = type_id.split(".")
+                category = parts[0] if parts else "utility"
+                
+                if node_type:
+                    title = node_type.name
+                    inputs = [(inp.name, inp.data_type.name) for inp in node_type.inputs]
+                    outputs = [(out.name, out.data_type.name) for out in node_type.outputs]
+                else:
+                    title = parts[-1].replace("_", " ").title()
+                    inputs, outputs = [], []
+                
+                # Add visual node
+                self._node_graph_canvas.add_visual_node(
+                    node_id=visual_id,
+                    x=x, y=y,
+                    title=title,
+                    category=category,
+                    inputs=inputs,
+                    outputs=outputs,
+                )
+                
+                # Set type_id in visual node
+                if visual_id in self._node_graph_canvas._nodes:
+                    self._node_graph_canvas._nodes[visual_id].type_id = type_id
+            
+            # Restore connections
+            for conn_data in data.get("connections", []):
+                src = conn_data["source"]
+                src_out = conn_data["source_output"]
+                tgt = conn_data["target"]
+                tgt_in = conn_data["target_input"]
+                
+                # Add visual connection
+                self._node_graph_canvas.add_visual_connection(src, src_out, tgt, tgt_in)
+                
+                # Add core connection
+                if src in self._node_id_map and tgt in self._node_id_map:
+                    from ai_image_studio.core.graph import Connection
+                    conn = Connection.create(
+                        source_node=self._node_id_map[src],
+                        source_output=src_out,
+                        target_node=self._node_id_map[tgt],
+                        target_input=tgt_in,
+                    )
+                    self._graph.add_connection(conn)
+            
+            node_count = len(data.get("nodes", []))
+            if node_count > 0:
+                self._console_panel.log_info(f"Restored {node_count} nodes from last session")
+                
+        except Exception as e:
+            print(f"Failed to load session: {e}")
     
     def _connect_canvas_signals(self) -> None:
         """Connect canvas signals for syncing with core model."""
@@ -392,7 +482,27 @@ class MainWindow(QMainWindow):
         """Save state before closing."""
         self._settings.setValue("geometry", self.saveGeometry())
         self._settings.setValue("windowState", self.saveState())
+        
+        # Auto-save workspace for next session
+        self._save_session()
+        
         super().closeEvent(event)
+    
+    def _save_session(self) -> None:
+        """Save current workspace to last session file."""
+        from ai_image_studio.core.workspace import save_workspace, get_last_session_path
+        
+        try:
+            save_workspace(
+                graph=self._graph,
+                node_id_map=self._node_id_map,
+                visual_nodes=self._node_graph_canvas._nodes,
+                connections=self._node_graph_canvas._connections,
+                path=get_last_session_path(),
+                name="_last_session",
+            )
+        except Exception as e:
+            print(f"Failed to save session: {e}")
     
     # --- Menu action handlers ---
     
@@ -794,11 +904,22 @@ class MainWindow(QMainWindow):
                 node_type = NodeRegistry.instance().get(type_id) if type_id else None
                 
                 if node_type and node_type.parameters:
-                    # Use actual parameter definitions
+                    # Get saved parameters from core Node (if exists)
+                    saved_params = {}
+                    if node_id in self._node_id_map:
+                        core_id = self._node_id_map[node_id]
+                        core_node = self._graph.get_node(core_id)
+                        if core_node:
+                            saved_params = core_node.parameters.copy()
+                    
+                    # Merge defaults with saved values (saved takes precedence)
+                    params = node_type.get_default_parameters()
+                    params.update(saved_params)
+                    
                     self._properties_panel.set_node(
                         node_id=node_id,
                         title=visual_node.title,
-                        parameters=node_type.get_default_parameters(),
+                        parameters=params,
                         definitions=node_type.parameters,
                     )
                 else:

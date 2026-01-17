@@ -546,8 +546,9 @@ class OutputStudio(QWidget):
         
         layout.addWidget(canvas_container)
         
-        # Status bar
+        # Status bar - compact info strip at bottom
         self._status_bar = QFrame()
+        self._status_bar.setFixedHeight(22)  # Fixed small height
         self._status_bar.setStyleSheet("""
             QFrame {
                 background-color: #1e1e2e;
@@ -555,17 +556,18 @@ class OutputStudio(QWidget):
             }
         """)
         status_layout = QHBoxLayout(self._status_bar)
-        status_layout.setContentsMargins(8, 4, 8, 4)
+        status_layout.setContentsMargins(6, 2, 6, 2)
+        status_layout.setSpacing(12)
         
         self._cursor_label = QLabel("X: - Y: -")
-        self._cursor_label.setStyleSheet("color: #6c7086; font-size: 11px;")
+        self._cursor_label.setStyleSheet("color: #6c7086; font-size: 10px;")
         status_layout.addWidget(self._cursor_label)
         
-        status_layout.addStretch()
-        
-        self._color_label = QLabel("RGB: - - -")
-        self._color_label.setStyleSheet("color: #6c7086; font-size: 11px;")
+        self._color_label = QLabel("RGB: ---")
+        self._color_label.setStyleSheet("color: #6c7086; font-size: 10px;")
         status_layout.addWidget(self._color_label)
+        
+        status_layout.addStretch()
         
         layout.addWidget(self._status_bar)
     

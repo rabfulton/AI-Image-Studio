@@ -15,6 +15,7 @@ src/ai_image_studio/core/execution.py
 src/ai_image_studio/core/graph.py
 src/ai_image_studio/core/node_types.py
 src/ai_image_studio/core/project.py
+src/ai_image_studio/core/workspace.py
 src/ai_image_studio/filters/__init__.py
 src/ai_image_studio/nodes/__init__.py
 src/ai_image_studio/nodes/enhancement/__init__.py
