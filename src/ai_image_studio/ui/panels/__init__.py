@@ -1,0 +1,3 @@
+"""
+Dock panels UI components.
+"""

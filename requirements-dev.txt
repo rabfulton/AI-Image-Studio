@@ -1,0 +1,15 @@
+# Testing
+pytest>=7.4.0
+pytest-qt>=4.2.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# Formatting and linting
+black>=23.0.0
+ruff>=0.1.0
+
+# Type checking
+mypy>=1.7.0
+
+# Debugging
+ipython>=8.0.0
