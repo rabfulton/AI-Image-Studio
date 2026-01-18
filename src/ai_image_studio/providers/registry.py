@@ -598,7 +598,47 @@ class ProviderRegistry:
     def list_available_models(self) -> list[ModelCard]:
         """List models from configured providers only."""
         configured = set(self.list_configured_providers())
-        return [m for m in self._model_cards.values() if m.provider in configured]
+        # Also include local provider if it has models
+        local_models = [m for m in self._model_cards.values() if m.id.startswith("local/")]
+        api_models = [m for m in self._model_cards.values() if m.provider in configured]
+        return api_models + local_models
+    
+    def refresh_local_models(self) -> int:
+        """
+        Scan local model folders and register discovered models.
+        
+        Returns:
+            Number of models discovered and registered.
+        """
+        from ai_image_studio.providers.sd_cpp_models import LocalModelScanner
+        from pathlib import Path
+        
+        config = self.get_config("sd-cpp")
+        folders = config.extra.get("model_folders", [])
+        
+        if not folders:
+            # Remove any existing local models
+            self._model_cards = {
+                k: v for k, v in self._model_cards.items()
+                if not k.startswith("local/")
+            }
+            return 0
+        
+        # Remove old local models
+        self._model_cards = {
+            k: v for k, v in self._model_cards.items()
+            if not k.startswith("local/")
+        }
+        
+        # Scan and register new ones
+        scanner = LocalModelScanner()
+        models = scanner.scan([Path(f) for f in folders])
+        
+        for info in models:
+            card = scanner.to_model_card(info)
+            self.register_model(card)
+        
+        return len(models)
     
     # -------------------------------------------------------------------------
     # Configuration

@@ -34,12 +34,15 @@ src/ai_image_studio/providers/gemini.py
 src/ai_image_studio/providers/openai.py
 src/ai_image_studio/providers/openrouter.py
 src/ai_image_studio/providers/registry.py
+src/ai_image_studio/providers/sd_cpp.py
+src/ai_image_studio/providers/sd_cpp_models.py
 src/ai_image_studio/providers/xai.py
 src/ai_image_studio/scripting/__init__.py
 src/ai_image_studio/state/__init__.py
 src/ai_image_studio/ui/__init__.py
 src/ai_image_studio/ui/main_window.py
 src/ai_image_studio/ui/dialogs/__init__.py
+src/ai_image_studio/ui/dialogs/model_download.py
 src/ai_image_studio/ui/dialogs/provider_settings.py
 src/ai_image_studio/ui/node_graph/__init__.py
 src/ai_image_studio/ui/node_graph/canvas.py

@@ -296,6 +296,14 @@ class ConsolePanel(QWidget):
         """Set progress bar value."""
         self._progress_bar.setMaximum(maximum)
         self._progress_bar.setValue(value)
+
+    def set_busy(self, busy: bool) -> None:
+        """Set progress bar to indeterminate (busy) mode."""
+        if busy:
+            self._progress_bar.setRange(0, 0)
+        else:
+            # Restore determinate mode
+            self._progress_bar.setRange(0, 100)
     
     def set_node_progress(self, node_name: str, current: int, total: int) -> None:
         """Set current node being executed."""

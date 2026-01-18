@@ -1,0 +1,15 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+def pytest_configure() -> None:
+    """
+    Ensure `src/` is on sys.path so tests can import `ai_image_studio`
+    without requiring an editable install.
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    src_root = repo_root / "src"
+    sys.path.insert(0, str(src_root))
+

@@ -40,6 +40,10 @@ class ExecutionProgress:
     nodes_total: int = 0
     message: str = ""
     error: str | None = None
+    preview_image: Any | None = None  # ImageData, if provider supports previews
+    preview_step: int | None = None
+    preview_total_steps: int | None = None
+    preview_is_noisy: bool = False
     
     @property
     def progress_percent(self) -> float:
@@ -77,9 +81,11 @@ class ExecutionContext:
         self,
         job_id: UUID,
         on_progress: Callable[[ExecutionProgress], None] | None = None,
+        external_cancelled: Callable[[], bool] | None = None,
     ):
         self.job_id = job_id
         self._on_progress = on_progress
+        self._external_cancelled = external_cancelled
         self._cancelled = False
         self._cache: dict[str, Any] = {}
         self._providers: dict[str, Any] = {}
@@ -93,7 +99,7 @@ class ExecutionContext:
     
     def check_cancelled(self) -> None:
         """Raise if cancelled."""
-        if self._cancelled:
+        if self._cancelled or (self._external_cancelled and self._external_cancelled()):
             raise asyncio.CancelledError("Execution cancelled")
     
     def report_progress(self, progress: ExecutionProgress) -> None:
@@ -130,12 +136,13 @@ class ExecutionEngine:
     - Result caching
     """
     
-    def __init__(self):
+    def __init__(self, external_cancelled: Callable[[], bool] | None = None):
         self._queue: list[ExecutionJob] = []
         self._current_job: ExecutionJob | None = None
         self._current_context: ExecutionContext | None = None
         self._is_running = False
         self._lock = asyncio.Lock()
+        self._external_cancelled = external_cancelled
         
         # Callbacks
         self._on_progress: Callable[[ExecutionProgress], None] | None = None
@@ -270,6 +277,7 @@ class ExecutionEngine:
         context = ExecutionContext(
             job_id=job.id,
             on_progress=self._on_progress,
+            external_cancelled=self._external_cancelled,
         )
         self._current_context = context
         
@@ -329,6 +337,9 @@ class ExecutionEngine:
                         execution_time=0,  # TODO: measure
                     ))
                     
+                except asyncio.CancelledError:
+                    # Cancellation is not a node error.
+                    raise
                 except Exception as e:
                     node.mark_error(e)
                     raise

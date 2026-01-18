@@ -606,6 +606,7 @@ class MainWindow(QMainWindow):
         """Execute the current workflow using the ExecutionEngine."""
         import asyncio
         from PySide6.QtCore import QThreadPool, QRunnable, QObject, Signal
+        import threading
         from ai_image_studio.core.execution import get_engine, ExecutionStatus, ExecutionProgress
         
         # Check if we have any nodes
@@ -630,11 +631,12 @@ class MainWindow(QMainWindow):
             error = Signal(str)
         
         class ExecutionWorker(QRunnable):
-            def __init__(worker_self, graph, window):
+            def __init__(worker_self, graph, window, cancel_event: threading.Event):
                 super().__init__()
                 worker_self.graph = graph
                 worker_self.window = window
                 worker_self.signals = WorkerSignals()
+                worker_self.cancel_event = cancel_event
             
             def run(worker_self):
                 try:
@@ -648,8 +650,8 @@ class MainWindow(QMainWindow):
                 from ai_image_studio.core.execution import ExecutionEngine, ExecutionJob
                 import time
                 
-                # Create a fresh engine for this execution
-                engine = ExecutionEngine()
+                # Create a fresh engine for this execution, wired to an external cancel event
+                engine = ExecutionEngine(external_cancelled=worker_self.cancel_event.is_set)
                 
                 # Set up progress callback
                 def on_progress(p: ExecutionProgress):
@@ -703,7 +705,10 @@ class MainWindow(QMainWindow):
                 worker_self.signals.finished.emit(None)
         
         # Create worker
-        worker = ExecutionWorker(self._graph, self)
+        cancel_event = threading.Event()
+        self._active_cancel_event = cancel_event
+
+        worker = ExecutionWorker(self._graph, self, cancel_event)
         worker.signals.progress.connect(self._on_execution_progress)
         worker.signals.finished.connect(self._on_execution_finished)
         worker.signals.error.connect(self._on_generation_error)
@@ -713,6 +718,29 @@ class MainWindow(QMainWindow):
     def _on_execution_progress(self, progress) -> None:
         """Handle per-node progress updates from ExecutionEngine."""
         from ai_image_studio.core.execution import ExecutionStatus
+
+        # Live preview streaming (local sd.cpp)
+        preview_image = getattr(progress, "preview_image", None)
+        preview_step = getattr(progress, "preview_step", None)
+        preview_total = getattr(progress, "preview_total_steps", None)
+
+        if preview_total and preview_step is not None:
+            # Override node-based progress with sampling-step progress for local generation.
+            pct = int((preview_step / max(1, int(preview_total))) * 100)
+            self._console_panel.set_busy(False)
+            self._console_panel.set_progress(pct)
+
+            # If we're done sampling but still running, we're likely decoding.
+            if progress.status == ExecutionStatus.RUNNING and int(preview_step) >= int(preview_total):
+                self._console_panel.set_busy(True)
+                self._console_panel.set_status("Decoding (VAE)…")
+            elif progress.status == ExecutionStatus.RUNNING:
+                self._console_panel.set_status(f"Sampling ({preview_step}/{preview_total})")
+
+        if preview_image is not None:
+            self._output_studio.set_image_from_data(preview_image)
+            # Don't spam logs for preview frames
+            return
         
         # Log per-node progress
         if progress.current_node_name:
@@ -721,8 +749,10 @@ class MainWindow(QMainWindow):
             self._console_panel.log_info(progress.message)
         
         # Update progress bar
-        self._console_panel.set_progress(int(progress.progress_percent))
-        
+        if not (preview_total and preview_step is not None):
+            self._console_panel.set_busy(False)
+            self._console_panel.set_progress(int(progress.progress_percent))
+
         # Update status
         if progress.status == ExecutionStatus.RUNNING:
             node_progress = f"{progress.nodes_completed}/{progress.nodes_total}"
@@ -731,6 +761,10 @@ class MainWindow(QMainWindow):
     def _on_execution_finished(self, job) -> None:
         """Handle workflow execution completion."""
         from ai_image_studio.core.execution import ExecutionStatus
+
+        # Clear cancel hook
+        if hasattr(self, "_active_cancel_event"):
+            self._active_cancel_event = None
         
         if job is None:
             self._console_panel.log_warning("Execution completed with no job result")
@@ -787,10 +821,11 @@ class MainWindow(QMainWindow):
     
     def _on_cancel_execution(self) -> None:
         """Cancel the current execution."""
-        import asyncio
-        from ai_image_studio.core.execution import get_engine
-        
-        asyncio.create_task(get_engine().cancel())
+        cancel_event = getattr(self, "_active_cancel_event", None)
+        if cancel_event is None:
+            self._console_panel.log_warning("No active job to cancel.")
+            return
+        cancel_event.set()
         self._console_panel.log_warning("Cancellation requested...")
         self.statusBar().showMessage("Cancelling...", 2000)
     

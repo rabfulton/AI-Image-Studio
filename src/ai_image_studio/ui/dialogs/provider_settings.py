@@ -26,6 +26,9 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QStackedWidget,
+    QSpinBox,
+    QComboBox,
+    QFileDialog,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
@@ -96,6 +99,9 @@ class ProviderSettingsDialog(QDialog):
         self._add_provider_page("xai", "xAI (Grok)", [
             ("api_key", "API Key", "Your xAI API key", True),
         ], "https://console.x.ai/")
+        
+        # Local provider (special handling)
+        self._add_local_provider_page()
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -216,6 +222,251 @@ class ProviderSettingsDialog(QDialog):
         
         self._settings_stack.addWidget(page)
     
+    def _add_local_provider_page(self) -> None:
+        """Add settings page for local sd.cpp provider."""
+        # Add to list
+        item = QListWidgetItem("Local (sd.cpp)")
+        item.setData(Qt.ItemDataRole.UserRole, "sd-cpp")
+        self._provider_list.addItem(item)
+        
+        # Create page
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Header
+        header = QLabel("<h2>Local (sd.cpp)</h2>")
+        page_layout.addWidget(header)
+        
+        desc = QLabel("Run Stable Diffusion locally using stable-diffusion.cpp")
+        desc.setStyleSheet("color: #a6adc8;")
+        page_layout.addWidget(desc)
+        
+        # Enable checkbox
+        enable_cb = QCheckBox("Enable this provider")
+        enable_cb.setChecked(True)
+        enable_cb.setObjectName("sd-cpp_enabled")
+        page_layout.addWidget(enable_cb)
+        
+        # Model folders group
+        folders_group = QGroupBox("Model Folders")
+        folders_layout = QVBoxLayout(folders_group)
+        
+        self._local_folders_list = QListWidget()
+        self._local_folders_list.setMaximumHeight(100)
+        folders_layout.addWidget(self._local_folders_list)
+        
+        folder_buttons = QHBoxLayout()
+        
+        add_folder_btn = QPushButton("Add Folder...")
+        add_folder_btn.clicked.connect(self._on_add_model_folder)
+        folder_buttons.addWidget(add_folder_btn)
+        
+        remove_folder_btn = QPushButton("Remove")
+        remove_folder_btn.clicked.connect(self._on_remove_model_folder)
+        folder_buttons.addWidget(remove_folder_btn)
+        
+        folder_buttons.addStretch()
+        
+        download_btn = QPushButton("Download Models...")
+        download_btn.clicked.connect(self._on_download_models)
+        folder_buttons.addWidget(download_btn)
+        
+        scan_btn = QPushButton("Scan Models")
+        scan_btn.clicked.connect(self._on_scan_models)
+        folder_buttons.addWidget(scan_btn)
+        
+        folders_layout.addLayout(folder_buttons)
+        page_layout.addWidget(folders_group)
+        
+        # Device settings group
+        device_group = QGroupBox("Device Settings")
+        device_form = QFormLayout(device_group)
+        
+        self._device_combo = QComboBox()
+        self._device_combo.addItems(["Auto", "CPU", "CUDA", "Vulkan"])
+        self._device_combo.setObjectName("sd-cpp_device")
+        device_form.addRow("Device:", self._device_combo)
+        
+        self._threads_spin = QSpinBox()
+        self._threads_spin.setRange(-1, 128)
+        self._threads_spin.setValue(-1)
+        self._threads_spin.setSpecialValueText("Auto")
+        self._threads_spin.setObjectName("sd-cpp_threads")
+        device_form.addRow("Threads:", self._threads_spin)
+
+        self._keep_vae_on_cpu_cb = QCheckBox(
+            "Keep VAE on CPU (reduces VRAM usage; helps avoid grey outputs)"
+        )
+        self._keep_vae_on_cpu_cb.setObjectName("sd-cpp_keep_vae_on_cpu")
+        self._keep_vae_on_cpu_cb.setChecked(False)
+        device_form.addRow("", self._keep_vae_on_cpu_cb)
+
+        self._keep_clip_on_cpu_cb = QCheckBox("Keep CLIP on CPU (reduces VRAM usage)")
+        self._keep_clip_on_cpu_cb.setObjectName("sd-cpp_keep_clip_on_cpu")
+        self._keep_clip_on_cpu_cb.setChecked(False)
+        device_form.addRow("", self._keep_clip_on_cpu_cb)
+        
+        page_layout.addWidget(device_group)
+        
+        # Library status and capabilities
+        status_group = QGroupBox("Library Status")
+        status_layout = QVBoxLayout(status_group)
+        
+        try:
+            import stable_diffusion_cpp as sd_cpp
+            status_text = "✓ stable-diffusion-cpp-python installed"
+            status_style = "color: #a6e3a1;"
+            
+            # Check backend
+            info = sd_cpp.sd_get_system_info()
+            if isinstance(info, bytes):
+                info = info.decode('utf-8', errors='ignore')
+            
+            # Determine backend (case-insensitive; different builds format this differently)
+            info_upper = info.upper()
+            if "CUBLAS" in info_upper or "CUDA" in info_upper:
+                backend = "CUDA"
+            elif "VULKAN" in info_upper:
+                backend = "Vulkan"
+            elif "METAL" in info_upper:
+                backend = "Metal"
+            else:
+                backend = "CPU"
+            
+            backend_label = QLabel(f"Backend: {backend}")
+            backend_label.setStyleSheet("color: #89b4fa;")
+            status_layout.addWidget(backend_label)
+            
+            if backend == "CPU":
+                hint = QLabel(
+                    "💡 For GPU acceleration, reinstall with:\n"
+                    "CMAKE_ARGS=\"-DSD_VULKAN=ON\" pip install --force-reinstall stable-diffusion-cpp-python"
+                )
+                hint.setStyleSheet("color: #fab387; font-size: 10px;")
+                hint.setWordWrap(True)
+                status_layout.addWidget(hint)
+                
+        except ImportError:
+            status_text = "⚠ stable-diffusion-cpp-python not installed"
+            status_style = "color: #f38ba8;"
+        
+        status = QLabel(status_text)
+        status.setStyleSheet(status_style)
+        status_layout.insertWidget(0, status)
+        
+        page_layout.addWidget(status_group)
+        
+        # Discovered models
+        self._local_models_group = QGroupBox("Discovered Models")
+        self._local_models_layout = QVBoxLayout(self._local_models_group)
+        
+        no_models = QLabel("Click 'Scan Models' to discover local models")
+        no_models.setStyleSheet("color: #6c7086;")
+        no_models.setObjectName("sd-cpp_no_models_label")
+        self._local_models_layout.addWidget(no_models)
+        
+        page_layout.addWidget(self._local_models_group)
+        
+        page_layout.addStretch()
+        
+        self._settings_stack.addWidget(page)
+    
+    def _on_add_model_folder(self) -> None:
+        """Add a model folder."""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Model Folder",
+            "",
+            QFileDialog.Option.ShowDirsOnly,
+        )
+        if folder:
+            # Check if already in list
+            for i in range(self._local_folders_list.count()):
+                if self._local_folders_list.item(i).text() == folder:
+                    return
+            self._local_folders_list.addItem(folder)
+    
+    def _on_remove_model_folder(self) -> None:
+        """Remove selected model folder."""
+        current = self._local_folders_list.currentRow()
+        if current >= 0:
+            self._local_folders_list.takeItem(current)
+    
+    def _on_scan_models(self) -> None:
+        """Scan configured folders for models."""
+        from pathlib import Path
+        from ai_image_studio.providers.sd_cpp_models import LocalModelScanner
+        
+        # Gather folders
+        folders = []
+        for i in range(self._local_folders_list.count()):
+            folders.append(Path(self._local_folders_list.item(i).text()))
+        
+        if not folders:
+            QMessageBox.information(self, "No Folders", "Add model folders first.")
+            return
+        
+        # Scan
+        scanner = LocalModelScanner()
+        models = scanner.scan(folders)
+        
+        # Clear existing labels
+        while self._local_models_layout.count():
+            item = self._local_models_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Show results
+        if models:
+            for info in models[:10]:  # Show first 10
+                size_str = f"{info.size_gb:.1f}GB"
+                label = QLabel(f"• {info.display_name} ({size_str})")
+                label.setStyleSheet("color: #a6adc8;")
+                self._local_models_layout.addWidget(label)
+            if len(models) > 10:
+                more = QLabel(f"... and {len(models) - 10} more")
+                more.setStyleSheet("color: #6c7086; font-style: italic;")
+                self._local_models_layout.addWidget(more)
+            
+            QMessageBox.information(
+                self, "Scan Complete", f"Found {len(models)} model(s)."
+            )
+        else:
+            no_models = QLabel("No models found in configured folders")
+            no_models.setStyleSheet("color: #f38ba8;")
+            self._local_models_layout.addWidget(no_models)
+    
+    def _on_download_models(self) -> None:
+        """Open the model download dialog."""
+        from pathlib import Path
+        from ai_image_studio.ui.dialogs.model_download import ModelDownloadDialog
+        
+        # Determine destination folder
+        if self._local_folders_list.count() > 0:
+            dest = Path(self._local_folders_list.item(0).text())
+        else:
+            dest = Path.home() / ".local" / "share" / "ai-models"
+        
+        dialog = ModelDownloadDialog(dest_folder=dest, parent=self)
+        
+        # When a model is downloaded, refresh the list
+        def on_model_downloaded(path: str):
+            # Add folder if not already in list
+            folder = str(Path(path).parent)
+            exists = False
+            for i in range(self._local_folders_list.count()):
+                if self._local_folders_list.item(i).text() == folder:
+                    exists = True
+                    break
+            if not exists:
+                self._local_folders_list.addItem(folder)
+            # Trigger scan
+            self._on_scan_models()
+        
+        dialog.model_downloaded.connect(on_model_downloaded)
+        dialog.exec()
+    
     def _on_provider_changed(self, row: int) -> None:
         """Handle provider selection change."""
         self._settings_stack.setCurrentIndex(row)
@@ -237,6 +488,35 @@ class ProviderSettingsDialog(QDialog):
             key_edit = self.findChild(QLineEdit, f"{provider_id}_api_key")
             if key_edit:
                 key_edit.setText(config.api_key)
+        
+        # Load local provider settings
+        local_config = registry.get_config("sd-cpp")
+        
+        # Model folders
+        folders = local_config.extra.get("model_folders", [])
+        self._local_folders_list.clear()
+        for folder in folders:
+            self._local_folders_list.addItem(folder)
+        
+        # Device
+        device = local_config.extra.get("device", "auto").lower()
+        device_map = {"auto": 0, "cpu": 1, "cuda": 2, "vulkan": 3}
+        self._device_combo.setCurrentIndex(device_map.get(device, 0))
+        
+        # Threads
+        threads = local_config.extra.get("n_threads", -1)
+        self._threads_spin.setValue(threads)
+
+        # Runtime flags
+        keep_vae_on_cpu = bool(local_config.extra.get("keep_vae_on_cpu", True))
+        keep_clip_on_cpu = bool(local_config.extra.get("keep_clip_on_cpu", False))
+        self._keep_vae_on_cpu_cb.setChecked(keep_vae_on_cpu)
+        self._keep_clip_on_cpu_cb.setChecked(keep_clip_on_cpu)
+        
+        # Enabled
+        enabled_cb = self.findChild(QCheckBox, "sd-cpp_enabled")
+        if enabled_cb:
+            enabled_cb.setChecked(local_config.enabled)
     
     def _on_save(self) -> None:
         """Save settings and close."""
@@ -252,6 +532,34 @@ class ProviderSettingsDialog(QDialog):
                 enabled=enabled_cb.isChecked() if enabled_cb else True,
             )
             registry.set_config(provider_id, config)
+        
+        # Save local provider settings
+        enabled_cb = self.findChild(QCheckBox, "sd-cpp_enabled")
+        
+        # Gather folders
+        folders = []
+        for i in range(self._local_folders_list.count()):
+            folders.append(self._local_folders_list.item(i).text())
+        
+        # Device
+        device_map = {0: "auto", 1: "cpu", 2: "cuda", 3: "vulkan"}
+        device = device_map.get(self._device_combo.currentIndex(), "auto")
+        
+        local_config = ProviderConfig(
+            api_key="",  # Local provider doesn't use API keys
+            enabled=enabled_cb.isChecked() if enabled_cb else True,
+            extra={
+                "model_folders": folders,
+                "device": device,
+                "n_threads": self._threads_spin.value(),
+                "keep_vae_on_cpu": self._keep_vae_on_cpu_cb.isChecked(),
+                "keep_clip_on_cpu": self._keep_clip_on_cpu_cb.isChecked(),
+            },
+        )
+        registry.set_config("sd-cpp", local_config)
+        
+        # Refresh local models in registry
+        registry.refresh_local_models()
         
         # Save to disk
         registry.save_config()

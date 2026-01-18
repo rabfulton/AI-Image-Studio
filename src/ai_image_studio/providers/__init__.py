@@ -7,6 +7,7 @@ This package provides integrations with various AI image generation services:
 - Google Gemini: Imagen 3/4, Gemini Image models
 - xAI: Grok 2 Image
 - OpenRouter: Multi-model proxy
+- Local: stable-diffusion.cpp (CPU/CUDA/Vulkan)
 
 Usage:
     from ai_image_studio.providers import get_registry
@@ -45,6 +46,7 @@ from ai_image_studio.providers.bfl import BFLProvider
 from ai_image_studio.providers.gemini import GeminiProvider
 from ai_image_studio.providers.xai import XAIProvider
 from ai_image_studio.providers.openrouter import OpenRouterProvider
+from ai_image_studio.providers.sd_cpp import SDCppProvider
 
 
 # Auto-register providers
@@ -55,6 +57,7 @@ def _register_providers():
     registry.register_provider(GeminiProvider)
     registry.register_provider(XAIProvider)
     registry.register_provider(OpenRouterProvider)
+    registry.register_provider(SDCppProvider)
 
 _register_providers()
 
@@ -84,4 +87,5 @@ __all__ = [
     "GeminiProvider",
     "XAIProvider",
     "OpenRouterProvider",
+    "SDCppProvider",
 ]

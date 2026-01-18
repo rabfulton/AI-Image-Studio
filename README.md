@@ -8,7 +8,7 @@ A powerful, Linux-native AI image generation and editing application.
 
 - **Node-based workflows** - Build flexible, reproducible image processing pipelines
 - **Output Studio** - Compare, blend, and refine generated images
-- **Universal model support** - Local models (Diffusers, SDXL) and hosted APIs (OpenAI, Stability AI)
+- **Universal model support** - Local models via `stable-diffusion.cpp` (focused set like SDXL/SD1.5) and hosted APIs (OpenAI, Stability AI, etc.)
 - **600+ filters** - G'MIC integration for non-AI image processing
 - **Batch processing** - Automate workflows with scripting and batch operations
 
