@@ -179,6 +179,31 @@ class ImageData:
         return cls(pixels=arr, metadata=meta)
     
     @classmethod
+    def from_file(cls, path: str | Path, metadata: ImageMetadata | None = None) -> ImageData:
+        """
+        Create ImageData by loading an image from a file.
+        
+        Args:
+            path: Path to the image file
+            metadata: Optional metadata (source_path will be set automatically)
+        
+        Returns:
+            ImageData with the loaded image
+        """
+        from PIL import Image
+        
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Image file not found: {path}")
+        
+        image = Image.open(path)
+        
+        meta = metadata or ImageMetadata()
+        meta.source_path = path
+        
+        return cls.from_pil(image, meta)
+    
+    @classmethod
     def empty(cls, width: int, height: int, channels: int = 3) -> ImageData:
         """Create an empty (black) image of the given size."""
         arr = np.zeros((height, width, channels), dtype=np.float32)

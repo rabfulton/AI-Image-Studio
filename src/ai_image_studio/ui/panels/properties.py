@@ -53,8 +53,12 @@ class PropertiesPanel(QWidget):
         
         self._current_node_id: str | None = None
         self._widgets: dict[str, QWidget] = {}
+        self._param_containers: dict[str, QWidget] = {}  # Container widgets for visibility control
         self._model_param_widgets: dict[str, QWidget] = {}  # Dynamic model params
+        self._filter_param_widgets: dict[str, QWidget] = {}  # Dynamic G'MIC filter params
         self._pending_model_id: str | None = None
+        self._pending_filter_id: str | None = None  # For G'MIC filters
+        self._current_model_id: str | None = None  # Track current model for visibility updates
         
         self._setup_ui()
     
@@ -150,6 +154,11 @@ class PropertiesPanel(QWidget):
         if self._pending_model_id:
             self._update_model_params(self._pending_model_id)
             self._pending_model_id = None
+        
+        # Load dynamic filter params if we have a filter selected
+        if self._pending_filter_id:
+            self._update_filter_params(self._pending_filter_id)
+            self._pending_filter_id = None
     
     def set_simple_properties(
         self,
@@ -206,6 +215,8 @@ class PropertiesPanel(QWidget):
         for widget in self._widgets.values():
             widget.deleteLater()
         self._widgets.clear()
+        self._param_containers.clear()
+        self._current_model_id = None
         
         # Remove all except stretch and empty label
         while self._params_layout.count() > 2:
@@ -283,9 +294,21 @@ class PropertiesPanel(QWidget):
                 idx = widget.findData(value)
                 if idx >= 0:
                     widget.setCurrentIndex(idx)
-            widget.currentIndexChanged.connect(
-                lambda idx, n=name: self._on_value_changed(n, widget.currentData())
-            )
+            
+            # Special handling for filter_id - update filter params dynamically
+            if name == "filter_id":
+                def on_filter_changed(idx, n=name, w=widget):
+                    filter_id = w.currentData()
+                    self._on_value_changed(n, filter_id)
+                    self._update_filter_params(filter_id)
+                widget.currentIndexChanged.connect(on_filter_changed)
+                # Queue initial filter param load
+                if value:
+                    self._pending_filter_id = value
+            else:
+                widget.currentIndexChanged.connect(
+                    lambda idx, n=name: self._on_value_changed(n, widget.currentData())
+                )
         
         elif param_def.param_type == ParameterType.SLIDER:
             container = QWidget()
@@ -464,6 +487,7 @@ class PropertiesPanel(QWidget):
                 container
             )
             self._widgets[name] = widget
+            self._param_containers[name] = container  # Store container for visibility control
     
     def _add_simple_parameter(self, name: str, value: Any) -> None:
         """Add a widget for a simple parameter (auto-detect type)."""
@@ -616,7 +640,12 @@ class PropertiesPanel(QWidget):
                     pass  # Widget already deleted
         
         if not model_id:
+            # Show all base params when no model selected
+            for container in self._param_containers.values():
+                container.show()
             return
+        
+        self._current_model_id = model_id
         
         # Get ModelCard
         try:
@@ -624,63 +653,198 @@ class PropertiesPanel(QWidget):
             registry = get_registry()
             model = registry.get_model(model_id)
             
-            if not model or not model.param_options:
+            if not model:
                 return
             
-            # Create separator
-            separator = QFrame()
-            separator.setFrameShape(QFrame.Shape.HLine)
-            separator.setStyleSheet("background-color: #313244;")
-            self._params_layout.insertWidget(
-                self._params_layout.count() - 1,
-                separator
-            )
-            self._model_param_widgets["_separator"] = separator
+            # Define which parameters are local-only (sd.cpp specific)
+            local_only_params = {
+                "steps", "cfg_scale", "sampler", "scheduler",
+                "stream_previews", "preview_method", "preview_interval",
+                "vae_tiling", "vae_tile_size", "vae_relative_tile_size", "vae_tile_overlap",
+                "negative_prompt",  # Most cloud models don't use negative prompts
+            }
             
-            # Create header
-            header = QLabel(f"🎨 {model.name} Options")
-            header.setStyleSheet("color: #89b4fa; font-weight: bold; margin-top: 8px;")
-            self._params_layout.insertWidget(
-                self._params_layout.count() - 1,
-                header
-            )
-            self._model_param_widgets["_header"] = header
+            # Determine if this is a local model
+            is_local = model.provider == "sd-cpp" or model.id.startswith("local/")
             
-            # Create widgets for each param option
-            for param_name, options in model.param_options.items():
-                label = QLabel(self._format_label(param_name))
-                label.setStyleSheet("color: #a6adc8;")
-                
-                combo = QComboBox()
-                for opt in options:
-                    combo.addItem(str(opt), opt)
-                
-                # Set default if available
-                if model.param_defaults and param_name in model.param_defaults:
-                    default = model.param_defaults[param_name]
-                    idx = combo.findData(default)
-                    if idx >= 0:
-                        combo.setCurrentIndex(idx)
-                
-                combo.currentIndexChanged.connect(
-                    lambda idx, n=param_name, c=combo: self._on_value_changed(n, c.currentData())
-                )
-                
-                # Container
-                container = QWidget()
-                container_layout = QVBoxLayout(container)
-                container_layout.setContentsMargins(0, 0, 0, 0)
-                container_layout.setSpacing(4)
-                container_layout.addWidget(label)
-                container_layout.addWidget(combo)
-                
+            # Hide/show parameters based on whether they're relevant
+            for param_name, container in self._param_containers.items():
+                if param_name in local_only_params:
+                    # Show only for local models
+                    container.setVisible(is_local)
+                else:
+                    # Always show other parameters (prompt, model, seed, width, height)
+                    container.show()
+            
+            # Now add model-specific parameter options from the ModelCard
+            if model.param_options:
+                # Create separator
+                separator = QFrame()
+                separator.setFrameShape(QFrame.Shape.HLine)
+                separator.setStyleSheet("background-color: #313244;")
                 self._params_layout.insertWidget(
                     self._params_layout.count() - 1,
-                    container
+                    separator
                 )
-                self._model_param_widgets[param_name] = container
+                self._model_param_widgets["_separator"] = separator
+                
+                # Create header
+                header = QLabel(f"🎨 {model.name} Options")
+                header.setStyleSheet("color: #89b4fa; font-weight: bold; margin-top: 8px;")
+                self._params_layout.insertWidget(
+                    self._params_layout.count() - 1,
+                    header
+                )
+                self._model_param_widgets["_header"] = header
+                
+                # Create widgets for each param option
+                for param_name, options in model.param_options.items():
+                    label = QLabel(self._format_label(param_name))
+                    label.setStyleSheet("color: #a6adc8;")
+                    
+                    combo = QComboBox()
+                    for opt in options:
+                        combo.addItem(str(opt), opt)
+                    
+                    # Set default if available
+                    if model.param_defaults and param_name in model.param_defaults:
+                        default = model.param_defaults[param_name]
+                        idx = combo.findData(default)
+                        if idx >= 0:
+                            combo.setCurrentIndex(idx)
+                    
+                    combo.currentIndexChanged.connect(
+                        lambda idx, n=param_name, c=combo: self._on_value_changed(n, c.currentData())
+                    )
+                    
+                    # Container
+                    container = QWidget()
+                    container_layout = QVBoxLayout(container)
+                    container_layout.setContentsMargins(0, 0, 0, 0)
+                    container_layout.setSpacing(4)
+                    container_layout.addWidget(label)
+                    container_layout.addWidget(combo)
+                    
+                    self._params_layout.insertWidget(
+                        self._params_layout.count() - 1,
+                        container
+                    )
+                    self._model_param_widgets[param_name] = container
                 
         except ImportError:
             pass
         except Exception as e:
             print(f"Error loading model params: {e}")
+    
+    def _update_filter_params(self, filter_id: str | None) -> None:
+        """Update dynamic G'MIC filter parameters based on selected filter."""
+        from PySide6.QtWidgets import QLabel, QSlider, QSpinBox, QComboBox, QCheckBox, QVBoxLayout, QHBoxLayout, QWidget
+        from PySide6.QtCore import Qt
+        
+        # Clear existing filter param widgets
+        for widget in self._filter_param_widgets.values():
+            widget.setParent(None)
+            widget.deleteLater()
+        self._filter_param_widgets.clear()
+        
+        if not filter_id:
+            return
+        
+        try:
+            from ai_image_studio.filters.filter_registry import get_filter, ParamType
+            
+            filter_spec = get_filter(filter_id)
+            if not filter_spec or not filter_spec.params:
+                return
+            
+            # Create widgets for each filter parameter
+            for param in filter_spec.params:
+                label = QLabel(param.name.replace("_", " ").title())
+                label.setStyleSheet("color: #a6adc8;")
+                
+                widget = None
+                scale = 100  # For slider precision
+                
+                if param.param_type == ParamType.FLOAT:
+                    # Slider for float params
+                    container_inner = QWidget()
+                    inner_layout = QHBoxLayout(container_inner)
+                    inner_layout.setContentsMargins(0, 0, 0, 0)
+                    
+                    slider = QSlider(Qt.Orientation.Horizontal)
+                    value_label = QLabel()
+                    
+                    min_val = param.min_value if param.min_value is not None else 0
+                    max_val = param.max_value if param.max_value is not None else 100
+                    default = param.default if param.default is not None else min_val
+                    
+                    slider.setMinimum(int(min_val * scale))
+                    slider.setMaximum(int(max_val * scale))
+                    slider.setValue(int(default * scale))
+                    
+                    def update_slider(v, s=scale, n=param.name, lbl=value_label):
+                        real = v / s
+                        lbl.setText(f"{real:.2f}")
+                        self._on_value_changed(n, real)
+                    
+                    slider.valueChanged.connect(update_slider)
+                    update_slider(slider.value())
+                    
+                    inner_layout.addWidget(slider)
+                    inner_layout.addWidget(value_label)
+                    widget = container_inner
+                    
+                elif param.param_type == ParamType.INT:
+                    spin = QSpinBox()
+                    min_val = int(param.min_value) if param.min_value is not None else 0
+                    max_val = int(param.max_value) if param.max_value is not None else 1000
+                    spin.setMinimum(min_val)
+                    spin.setMaximum(max_val)
+                    spin.setValue(int(param.default) if param.default is not None else min_val)
+                    spin.valueChanged.connect(
+                        lambda v, n=param.name: self._on_value_changed(n, v)
+                    )
+                    widget = spin
+                    
+                elif param.param_type == ParamType.BOOL:
+                    check = QCheckBox()
+                    check.setChecked(bool(param.default) if param.default is not None else False)
+                    check.toggled.connect(
+                        lambda v, n=param.name: self._on_value_changed(n, v)
+                    )
+                    widget = check
+                    
+                elif param.param_type == ParamType.CHOICE:
+                    combo = QComboBox()
+                    if param.options:
+                        for opt in param.options:
+                            combo.addItem(str(opt), opt)
+                    if param.default is not None:
+                        idx = combo.findData(param.default)
+                        if idx >= 0:
+                            combo.setCurrentIndex(idx)
+                    combo.currentIndexChanged.connect(
+                        lambda idx, n=param.name, c=combo: self._on_value_changed(n, c.currentData())
+                    )
+                    widget = combo
+                
+                if widget:
+                    # Container for label + widget
+                    container = QWidget()
+                    container_layout = QVBoxLayout(container)
+                    container_layout.setContentsMargins(0, 0, 0, 0)
+                    container_layout.setSpacing(4)
+                    container_layout.addWidget(label)
+                    container_layout.addWidget(widget)
+                    
+                    # Insert before the stretch
+                    self._params_layout.insertWidget(
+                        self._params_layout.count() - 1,
+                        container
+                    )
+                    self._filter_param_widgets[param.name] = container
+                    
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"Error loading filter params: {e}")

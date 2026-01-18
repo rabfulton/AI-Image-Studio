@@ -209,6 +209,10 @@ class MainWindow(QMainWindow):
         gen_menu.addAction("Image to Image")
         gen_menu.addAction("Inpaint")
         
+        # Filter nodes
+        filter_menu = add_menu.addMenu("Filter")
+        filter_menu.addAction("G'MIC Filter")
+        
         # Output nodes
         out_menu = add_menu.addMenu("Output")
         out_menu.addAction("Preview")

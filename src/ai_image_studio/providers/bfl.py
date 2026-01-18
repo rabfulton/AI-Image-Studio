@@ -71,10 +71,9 @@ class BFLProvider(ImageProvider):
             "prompt": request.prompt,
         }
         
-        # Add dimensions unless using Kontext (which uses aspect_ratio)
-        if not model_id.startswith("flux-kontext"):
-            body["width"] = request.width
-            body["height"] = request.height
+        # All BFL FLUX models use width/height parameters
+        body["width"] = request.width
+        body["height"] = request.height
         
         # Add optional parameters based on model
         extra = request.model.validate_params(request.extra_params)
@@ -102,15 +101,15 @@ class BFLProvider(ImageProvider):
                 body["image_prompt"] = self._image_to_base64(request.reference_images[0])
         
         # Submit generation request
-        task_id = await self._submit_generation(url, body)
+        task_id, polling_url = await self._submit_generation(url, body)
         
-        # Poll for result
-        result = await self._poll_result(task_id)
+        # Poll for result using the returned polling URL
+        result = await self._poll_result(polling_url)
         
-        return self._parse_result(result, request)
+        return await self._parse_result(result, request)
     
-    async def _submit_generation(self, url: str, body: dict) -> str:
-        """Submit generation request and get task ID."""
+    async def _submit_generation(self, url: str, body: dict) -> tuple[str, str]:
+        """Submit generation request and get task ID and polling URL."""
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 url,
@@ -123,11 +122,17 @@ class BFLProvider(ImageProvider):
                 task_id = data.get("id")
                 if not task_id:
                     raise GenerationError("No task ID in BFL response")
-                return task_id
+                
+                # BFL returns a polling_url to use for status checks
+                polling_url = data.get("polling_url")
+                if not polling_url:
+                    # Fallback to the traditional get_result endpoint
+                    polling_url = f"{self.base_url}/get_result?id={task_id}"
+                
+                return task_id, polling_url
     
-    async def _poll_result(self, task_id: str, timeout: float = 300) -> dict:
-        """Poll for generation result."""
-        url = f"{self.base_url}/get_result"
+    async def _poll_result(self, polling_url: str, timeout: float = 300) -> dict:
+        """Poll for generation result using the provided polling URL."""
         start_time = asyncio.get_event_loop().time()
         
         async with aiohttp.ClientSession() as session:
@@ -137,8 +142,7 @@ class BFLProvider(ImageProvider):
                     raise GenerationError("BFL generation timed out")
                 
                 async with session.get(
-                    url,
-                    params={"id": task_id},
+                    polling_url,
                     headers=self.get_headers(),
                 ) as resp:
                     data = await resp.json()
@@ -149,41 +153,55 @@ class BFLProvider(ImageProvider):
                         return data
                     elif status == "Error":
                         raise GenerationError(f"BFL error: {data.get('error', 'Unknown')}")
+                    elif status == "Task not found":
+                        raise GenerationError(
+                            "BFL task not found - the generation request may have failed "
+                            "or expired. Please try again."
+                        )
                     elif status in ("Pending", "Processing", "Queued"):
                         # Wait and retry
                         await asyncio.sleep(1.0)
                     else:
                         raise GenerationError(f"Unknown BFL status: {status}")
     
-    def _parse_result(self, data: dict, request: GenerationRequest) -> GenerationResult:
+    async def _parse_result(self, data: dict, request: GenerationRequest) -> GenerationResult:
         """Parse BFL result into GenerationResult."""
         from ai_image_studio.core.data_types import ImageData
         
         images = []
         result_data = data.get("result", {})
         
-        # BFL returns URL or base64
-        if "sample" in result_data:
-            # URL to image
-            # For now, we'd need to download it
-            # This is a simplification - real impl would download
-            pass
-        
-        # Or inline base64
+        # BFL returns a URL to the generated image in result.sample
         sample = result_data.get("sample")
-        if sample and sample.startswith("data:image"):
-            # Extract base64 from data URI
-            b64_data = sample.split(",", 1)[1]
-            img_bytes = base64.b64decode(b64_data)
-            pil_img = Image.open(BytesIO(img_bytes)).convert("RGBA")
-            arr = np.asarray(pil_img).astype(np.float32) / 255.0
-            images.append(ImageData.from_numpy(arr))
-        elif sample:
-            # Direct base64
-            img_bytes = base64.b64decode(sample)
-            pil_img = Image.open(BytesIO(img_bytes)).convert("RGBA")
-            arr = np.asarray(pil_img).astype(np.float32) / 255.0
-            images.append(ImageData.from_numpy(arr))
+        
+        if sample:
+            if sample.startswith("http://") or sample.startswith("https://"):
+                # It's a URL - download the image
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(sample) as resp:
+                        if resp.status == 200:
+                            img_bytes = await resp.read()
+                            pil_img = Image.open(BytesIO(img_bytes)).convert("RGBA")
+                            arr = np.asarray(pil_img).astype(np.float32) / 255.0
+                            images.append(ImageData.from_numpy(arr))
+                        else:
+                            raise GenerationError(f"Failed to download image: HTTP {resp.status}")
+            elif sample.startswith("data:image"):
+                # Data URI with base64
+                b64_data = sample.split(",", 1)[1]
+                img_bytes = base64.b64decode(b64_data)
+                pil_img = Image.open(BytesIO(img_bytes)).convert("RGBA")
+                arr = np.asarray(pil_img).astype(np.float32) / 255.0
+                images.append(ImageData.from_numpy(arr))
+            else:
+                # Direct base64
+                img_bytes = base64.b64decode(sample)
+                pil_img = Image.open(BytesIO(img_bytes)).convert("RGBA")
+                arr = np.asarray(pil_img).astype(np.float32) / 255.0
+                images.append(ImageData.from_numpy(arr))
+        
+        if not images:
+            raise GenerationError("No image data in BFL response")
         
         return GenerationResult(
             images=images,

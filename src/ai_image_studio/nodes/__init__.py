@@ -13,6 +13,7 @@ This package contains node implementations organized by category:
 from ai_image_studio.nodes.generation import register_generation_nodes
 from ai_image_studio.nodes.input import register_input_nodes
 from ai_image_studio.nodes.output import register_output_nodes
+from ai_image_studio.nodes.filter import register_gmic_nodes
 
 
 def register_all_nodes() -> None:
@@ -20,8 +21,10 @@ def register_all_nodes() -> None:
     register_input_nodes()
     register_generation_nodes()
     register_output_nodes()
+    register_gmic_nodes()
 
 
 __all__ = [
     "register_all_nodes",
 ]
+
