@@ -89,6 +89,14 @@ class ProviderSettingsDialog(QDialog):
             ("api_key", "API Key", "Your OpenRouter key", True),
         ], "https://openrouter.ai/keys")
         
+        self._add_provider_page("gemini", "Google Gemini", [
+            ("api_key", "API Key", "Your Gemini API key", True),
+        ], "https://aistudio.google.com/app/apikey")
+        
+        self._add_provider_page("xai", "xAI (Grok)", [
+            ("api_key", "API Key", "Your xAI API key", True),
+        ], "https://console.x.ai/")
+        
         # Buttons
         button_layout = QHBoxLayout()
         
@@ -217,7 +225,7 @@ class ProviderSettingsDialog(QDialog):
         from ai_image_studio.providers import get_registry
         registry = get_registry()
         
-        for provider_id in ["openai", "bfl", "openrouter"]:
+        for provider_id in ["openai", "bfl", "openrouter", "gemini", "xai"]:
             config = registry.get_config(provider_id)
             
             # Set enabled
@@ -235,7 +243,7 @@ class ProviderSettingsDialog(QDialog):
         from ai_image_studio.providers import get_registry, ProviderConfig
         registry = get_registry()
         
-        for provider_id in ["openai", "bfl", "openrouter"]:
+        for provider_id in ["openai", "bfl", "openrouter", "gemini", "xai"]:
             enabled_cb = self.findChild(QCheckBox, f"{provider_id}_enabled")
             key_edit = self.findChild(QLineEdit, f"{provider_id}_api_key")
             

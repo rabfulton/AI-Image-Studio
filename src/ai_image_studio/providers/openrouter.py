@@ -87,12 +87,25 @@ class OpenRouterProvider(ImageProvider):
             "modalities": ["image", "text"],
         }
         
-        # Add image config if we have aspect ratio
-        if request.model.aspect_ratios:
-            # Calculate aspect ratio from dimensions
+        # Build image_config from model parameters
+        image_config: dict[str, Any] = {}
+        extra = request.model.validate_params(request.extra_params)
+        
+        # Use aspect_ratio from params, or calculate from dimensions
+        if "aspect_ratio" in extra:
+            image_config["aspect_ratio"] = extra["aspect_ratio"]
+        elif request.model.aspect_ratios:
+            # Calculate closest aspect ratio from dimensions
             aspect = self._get_aspect_ratio(request.width, request.height)
             if aspect:
-                body["image_config"] = {"aspect_ratio": aspect}
+                image_config["aspect_ratio"] = aspect
+        
+        # Add image_size if present (Gemini Pro only)
+        if "image_size" in extra:
+            image_config["image_size"] = extra["image_size"]
+        
+        if image_config:
+            body["image_config"] = image_config
         
         # Maximum tokens for text response
         body["max_tokens"] = 300

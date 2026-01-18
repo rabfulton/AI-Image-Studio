@@ -71,29 +71,57 @@ BUILTIN_MODEL_CARDS: dict[str, ModelCard] = {
         id="gpt-image-1",
         provider="openai",
         name="GPT Image 1",
-        description="OpenAI's GPT-based image generation",
+        description="OpenAI's GPT-based image generation with editing support",
         modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE, GenerationMode.INPAINTING},
         resolutions=["auto", "1024x1024", "1024x1536", "1536x1024"],
         max_images=8,
-        max_reference_images=1,
-        params={"quality", "background"},
+        max_reference_images=16,
+        params={"quality", "background", "input_fidelity", "output_format", "moderation"},
         param_options={
             "quality": ["low", "medium", "high"],
             "background": ["auto", "opaque", "transparent"],
+            "input_fidelity": ["low", "high"],
+            "output_format": ["png", "webp", "jpeg"],
+            "moderation": ["auto", "low"],
         },
-        param_defaults={"quality": "low", "background": "auto"},
+        param_defaults={"quality": "low", "background": "auto", "input_fidelity": "low"},
         pricing_tier="standard",
+        tags=["editing", "inpainting"],
+    ),
+    
+    "gpt-image-1.5": ModelCard(
+        id="gpt-image-1.5",
+        provider="openai",
+        name="GPT Image 1.5",
+        description="OpenAI's most advanced image model with superior visual understanding",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE, GenerationMode.INPAINTING},
+        resolutions=["auto", "1024x1024", "1024x1536", "1536x1024"],
+        max_images=8,
+        max_reference_images=16,
+        params={"quality", "background", "input_fidelity", "output_format", "moderation"},
+        param_options={
+            "quality": ["low", "medium", "high"],
+            "background": ["auto", "opaque", "transparent"],
+            "input_fidelity": ["low", "high"],
+            "output_format": ["png", "webp", "jpeg"],
+            "moderation": ["auto", "low"],
+        },
+        param_defaults={"quality": "medium", "background": "auto", "input_fidelity": "high"},
+        pricing_tier="premium",
+        tags=["high-quality", "editing", "inpainting", "visual-understanding"],
     ),
     
     # -------------------------------------------------------------------------
     # Black Forest Labs FLUX Models
-    # Source: https://docs.bfl.ml/
+    # Source: https://docs.bfl.ai/
     # -------------------------------------------------------------------------
-    "flux-pro-1.1": ModelCard(
-        id="flux-pro-1.1",
+    
+    # Latest FLUX 2 generation
+    "flux-2-pro": ModelCard(
+        id="flux-2-pro",
         provider="bfl",
-        name="FLUX Pro 1.1",
-        description="Latest FLUX model with superior image quality",
+        name="FLUX 2 Pro",
+        description="Latest FLUX 2 Pro model with best overall quality",
         modes={GenerationMode.TEXT_TO_IMAGE},
         aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
         resolution_range=(256, 1440, 32),
@@ -102,9 +130,103 @@ BUILTIN_MODEL_CARDS: dict[str, ModelCard] = {
         param_options={
             "safety_tolerance": ["1", "2", "3", "4", "5", "6"],
         },
-        param_defaults={"safety_tolerance": "2", "prompt_upsampling": False},
+        param_defaults={"safety_tolerance": "2"},
         pricing_tier="premium",
-        tags=["high-quality", "fast"],
+        tags=["high-quality", "latest"],
+    ),
+    
+    "flux-2-max": ModelCard(
+        id="flux-2-max",
+        provider="bfl",
+        name="FLUX 2 Max",
+        description="FLUX 2 Max - highest quality generation",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
+        resolution_range=(256, 1440, 32),
+        max_images=1,
+        params={"seed", "safety_tolerance"},
+        param_options={
+            "safety_tolerance": ["1", "2", "3", "4", "5", "6"],
+        },
+        param_defaults={"safety_tolerance": "2"},
+        pricing_tier="premium",
+        tags=["high-quality", "max"],
+    ),
+    
+    # Kontext models for image editing
+    "flux-kontext-pro": ModelCard(
+        id="flux-kontext-pro",
+        provider="bfl",
+        name="FLUX Kontext Pro",
+        description="FLUX Kontext for image editing and manipulation",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "3:7", "7:3"],
+        max_images=1,
+        max_reference_images=1,
+        params={"seed", "safety_tolerance", "prompt_upsampling", "output_format"},
+        param_options={
+            "safety_tolerance": ["1", "2", "3", "4", "5", "6"],
+            "output_format": ["jpeg", "png"],
+        },
+        param_defaults={"safety_tolerance": "2", "output_format": "jpeg"},
+        pricing_tier="standard",
+        tags=["editing", "kontext"],
+    ),
+    
+    "flux-kontext-max": ModelCard(
+        id="flux-kontext-max",
+        provider="bfl",
+        name="FLUX Kontext Max",
+        description="FLUX Kontext Max - highest quality editing",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "3:7", "7:3"],
+        max_images=1,
+        max_reference_images=1,
+        params={"seed", "safety_tolerance", "prompt_upsampling", "output_format"},
+        param_options={
+            "safety_tolerance": ["1", "2", "3", "4", "5", "6"],
+            "output_format": ["jpeg", "png"],
+        },
+        param_defaults={"safety_tolerance": "2", "output_format": "jpeg"},
+        pricing_tier="premium",
+        tags=["editing", "kontext", "high-quality"],
+    ),
+    
+    # FLUX Pro 1.1 series
+    "flux-pro-1.1-ultra": ModelCard(
+        id="flux-pro-1.1-ultra",
+        provider="bfl",
+        name="FLUX Pro 1.1 Ultra",
+        description="Ultra quality FLUX Pro 1.1 model",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
+        resolution_range=(256, 1440, 32),
+        max_images=1,
+        params={"seed", "safety_tolerance", "prompt_upsampling"},
+        param_options={
+            "safety_tolerance": ["1", "2", "3", "4", "5", "6"],
+        },
+        param_defaults={"safety_tolerance": "2"},
+        pricing_tier="premium",
+        tags=["high-quality", "ultra"],
+    ),
+    
+    "flux-pro-1.1": ModelCard(
+        id="flux-pro-1.1",
+        provider="bfl",
+        name="FLUX Pro 1.1",
+        description="FLUX Pro 1.1 with superior image quality",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
+        resolution_range=(256, 1440, 32),
+        max_images=1,
+        params={"seed", "safety_tolerance", "prompt_upsampling"},
+        param_options={
+            "safety_tolerance": ["1", "2", "3", "4", "5", "6"],
+        },
+        param_defaults={"safety_tolerance": "2"},
+        pricing_tier="standard",
+        tags=["high-quality"],
     ),
     
     "flux-pro": ModelCard(
@@ -149,39 +271,246 @@ BUILTIN_MODEL_CARDS: dict[str, ModelCard] = {
         pricing_tier="budget",
         tags=["fast"],
     ),
+
     
     # -------------------------------------------------------------------------
     # Google Gemini/Imagen
+    # Source: https://ai.google.dev/gemini-api/docs/imagen
     # Source: https://ai.google.dev/gemini-api/docs/image-generation
     # -------------------------------------------------------------------------
-    "imagen-3": ModelCard(
-        id="imagen-3",
+    
+    # Imagen 4 models - text-to-image only, via :predict endpoint
+    "imagen-4.0-generate-001": ModelCard(
+        id="imagen-4.0-generate-001",
         provider="gemini",
-        name="Imagen 3",
-        description="Google's latest image generation model via Gemini API",
+        name="Imagen 4 Standard",
+        description="Google's latest Imagen model for high-quality image generation",
         modes={GenerationMode.TEXT_TO_IMAGE},
-        aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
+        aspect_ratios=["1:1", "3:4", "4:3", "9:16", "16:9"],
         max_images=4,
-        params={"negative_prompt"},
+        params={"numberOfImages", "aspectRatio", "personGeneration", "imageSize"},
+        param_options={
+            "numberOfImages": ["1", "2", "3", "4"],
+            "aspectRatio": ["1:1", "3:4", "4:3", "9:16", "16:9"],
+            "personGeneration": ["dont_allow", "allow_adult", "allow_all"],
+            "imageSize": ["1K", "2K"],
+        },
+        param_defaults={"numberOfImages": "4", "aspectRatio": "1:1", "personGeneration": "allow_adult", "imageSize": "1K"},
         pricing_tier="standard",
         tags=["high-quality"],
     ),
     
+    "imagen-4.0-ultra-generate-001": ModelCard(
+        id="imagen-4.0-ultra-generate-001",
+        provider="gemini",
+        name="Imagen 4 Ultra",
+        description="Google's highest quality Imagen model",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "3:4", "4:3", "9:16", "16:9"],
+        max_images=4,
+        params={"numberOfImages", "aspectRatio", "personGeneration", "imageSize"},
+        param_options={
+            "numberOfImages": ["1", "2", "3", "4"],
+            "aspectRatio": ["1:1", "3:4", "4:3", "9:16", "16:9"],
+            "personGeneration": ["dont_allow", "allow_adult", "allow_all"],
+            "imageSize": ["1K", "2K"],
+        },
+        param_defaults={"numberOfImages": "4", "aspectRatio": "1:1", "personGeneration": "allow_adult", "imageSize": "2K"},
+        pricing_tier="premium",
+        tags=["high-quality", "ultra"],
+    ),
+    
+    "imagen-4.0-fast-generate-001": ModelCard(
+        id="imagen-4.0-fast-generate-001",
+        provider="gemini",
+        name="Imagen 4 Fast",
+        description="Fast Imagen model optimized for speed",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "3:4", "4:3", "9:16", "16:9"],
+        max_images=4,
+        params={"numberOfImages", "aspectRatio", "personGeneration", "imageSize"},
+        param_options={
+            "numberOfImages": ["1", "2", "3", "4"],
+            "aspectRatio": ["1:1", "3:4", "4:3", "9:16", "16:9"],
+            "personGeneration": ["dont_allow", "allow_adult", "allow_all"],
+            "imageSize": ["1K", "2K"],
+        },
+        param_defaults={"numberOfImages": "1", "aspectRatio": "1:1", "personGeneration": "allow_adult", "imageSize": "1K"},
+        pricing_tier="budget",
+        tags=["fast"],
+    ),
+    
+    "imagen-3.0-generate-002": ModelCard(
+        id="imagen-3.0-generate-002",
+        provider="gemini",
+        name="Imagen 3",
+        description="Google's previous generation Imagen model",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "3:4", "4:3", "9:16", "16:9"],
+        max_images=4,
+        params={"numberOfImages", "aspectRatio", "personGeneration"},
+        param_options={
+            "numberOfImages": ["1", "2", "3", "4"],
+            "aspectRatio": ["1:1", "3:4", "4:3", "9:16", "16:9"],
+            "personGeneration": ["dont_allow", "allow_adult", "allow_all"],
+        },
+        param_defaults={"numberOfImages": "4", "aspectRatio": "1:1", "personGeneration": "allow_adult"},
+        pricing_tier="standard",
+        tags=["high-quality"],
+    ),
+    
+    # Gemini Image models - text-to-image AND image editing, via :generateContent endpoint
+    "gemini-2.5-flash-image": ModelCard(
+        id="gemini-2.5-flash-image",
+        provider="gemini",
+        name="Gemini 2.5 Flash Image",
+        description="Fast Gemini model for image generation and editing",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
+        max_images=1,
+        max_reference_images=3,
+        params={"aspectRatio", "response_modalities"},
+        param_options={
+            "aspectRatio": ["1:1", "16:9", "9:16", "4:3", "3:4"],
+            "response_modalities": ["Image", "Text,Image"],
+        },
+        param_defaults={"aspectRatio": "1:1", "response_modalities": "Image"},
+        pricing_tier="budget",
+        tags=["fast", "editing"],
+    ),
+    
+    "gemini-3-pro-image-preview": ModelCard(
+        id="gemini-3-pro-image-preview",
+        provider="gemini",
+        name="Gemini 3 Pro Image",
+        description="Professional Gemini model with up to 4K output and 14 reference images",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "9:16", "4:3", "3:4"],
+        max_images=1,
+        max_reference_images=14,
+        params={"aspectRatio", "imageSize", "response_modalities"},
+        param_options={
+            "aspectRatio": ["1:1", "16:9", "9:16", "4:3", "3:4"],
+            "imageSize": ["1K", "2K", "4K"],
+            "response_modalities": ["Image", "Text,Image"],
+        },
+        param_defaults={"aspectRatio": "1:1", "imageSize": "2K", "response_modalities": "Image"},
+        pricing_tier="premium",
+        tags=["high-quality", "editing", "4K"],
+    ),
+    
     # -------------------------------------------------------------------------
     # OpenRouter (proxies various models)
-    # These use chat completions with modalities=["image", "text"]
+    # Uses chat completions with modalities=["image", "text"]
+    # Source: https://openrouter.ai/docs/guides/overview/multimodal/image-generation
     # -------------------------------------------------------------------------
+    
+    # Free tier model
     "openrouter/google/gemini-2.0-flash-exp:free": ModelCard(
         id="openrouter/google/gemini-2.0-flash-exp:free",
         provider="openrouter",
         name="Gemini 2.0 Flash (Free)",
-        description="Google's fast multimodal model via OpenRouter",
+        description="Google's fast multimodal model via OpenRouter - Free tier",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        max_images=1,
+        max_reference_images=3,
+        params={"aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        },
+        param_defaults={"aspect_ratio": "1:1"},
+        pricing_tier="free",
+        tags=["free", "fast", "editing"],
+    ),
+    
+    # Gemini Image models via OpenRouter
+    "google/gemini-2.5-flash-image-preview": ModelCard(
+        id="google/gemini-2.5-flash-image-preview",
+        provider="openrouter",
+        name="Gemini 2.5 Flash Image (OR)",
+        description="Google's fast image model via OpenRouter",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        max_images=1,
+        max_reference_images=3,
+        params={"aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        },
+        param_defaults={"aspect_ratio": "1:1"},
+        pricing_tier="budget",
+        tags=["fast", "editing"],
+    ),
+    
+    "google/gemini-3-pro-image-preview": ModelCard(
+        id="google/gemini-3-pro-image-preview",
+        provider="openrouter",
+        name="Gemini 3 Pro Image (OR)",
+        description="Google's professional image model via OpenRouter with up to 4K output",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        max_images=1,
+        max_reference_images=14,
+        params={"aspect_ratio", "image_size"},
+        param_options={
+            "aspect_ratio": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+            "image_size": ["1K", "2K", "4K"],
+        },
+        param_defaults={"aspect_ratio": "1:1", "image_size": "2K"},
+        pricing_tier="premium",
+        tags=["high-quality", "editing", "4K"],
+    ),
+    
+    # BFL FLUX models via OpenRouter
+    "black-forest-labs/flux-1.1-pro": ModelCard(
+        id="black-forest-labs/flux-1.1-pro",
+        provider="openrouter",
+        name="FLUX 1.1 Pro (OR)",
+        description="BFL's FLUX 1.1 Pro model via OpenRouter",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        max_images=1,
+        params={"aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        },
+        param_defaults={"aspect_ratio": "1:1"},
+        pricing_tier="standard",
+        tags=["high-quality"],
+    ),
+    
+    "black-forest-labs/flux-schnell": ModelCard(
+        id="black-forest-labs/flux-schnell",
+        provider="openrouter",
+        name="FLUX Schnell (OR)",
+        description="BFL's fast FLUX model via OpenRouter",
         modes={GenerationMode.TEXT_TO_IMAGE},
         aspect_ratios=["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9"],
         max_images=1,
-        params=set(),
-        pricing_tier="free",
-        tags=["free", "fast"],
+        params={"aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9"],
+        },
+        param_defaults={"aspect_ratio": "1:1"},
+        pricing_tier="budget",
+        tags=["fast"],
+    ),
+    
+    # -------------------------------------------------------------------------
+    # xAI (Grok)
+    # Source: https://docs.x.ai/docs/guides/image-generations
+    # -------------------------------------------------------------------------
+    "grok-2-image": ModelCard(
+        id="grok-2-image",
+        provider="xai",
+        name="Grok 2 Image",
+        description="xAI's Grok image generation model",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        max_images=10,
+        params=set(),  # No quality/size/style params supported
+        pricing_tier="standard",
+        tags=["text-to-image"],
     ),
 }
 

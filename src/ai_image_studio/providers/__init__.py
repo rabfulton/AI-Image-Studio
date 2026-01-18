@@ -4,6 +4,8 @@ Image Generation Providers.
 This package provides integrations with various AI image generation services:
 - OpenAI: DALL-E 2, DALL-E 3, GPT Image
 - BFL: FLUX Pro, FLUX Dev, FLUX Schnell
+- Google Gemini: Imagen 3/4, Gemini Image models
+- xAI: Grok 2 Image
 - OpenRouter: Multi-model proxy
 
 Usage:
@@ -40,6 +42,8 @@ from ai_image_studio.providers.registry import (
 # Import providers to register them
 from ai_image_studio.providers.openai import OpenAIProvider
 from ai_image_studio.providers.bfl import BFLProvider
+from ai_image_studio.providers.gemini import GeminiProvider
+from ai_image_studio.providers.xai import XAIProvider
 from ai_image_studio.providers.openrouter import OpenRouterProvider
 
 
@@ -48,6 +52,8 @@ def _register_providers():
     registry = get_registry()
     registry.register_provider(OpenAIProvider)
     registry.register_provider(BFLProvider)
+    registry.register_provider(GeminiProvider)
+    registry.register_provider(XAIProvider)
     registry.register_provider(OpenRouterProvider)
 
 _register_providers()
@@ -75,5 +81,7 @@ __all__ = [
     # Providers
     "OpenAIProvider",
     "BFLProvider",
+    "GeminiProvider",
+    "XAIProvider",
     "OpenRouterProvider",
 ]

@@ -2,9 +2,10 @@
 OpenAI Provider - DALL-E and GPT Image models.
 
 Supports:
-- DALL-E 2: Text-to-image, image editing, inpainting
+- DALL-E 2: Text-to-image, image editing (multipart form), inpainting
 - DALL-E 3: Text-to-image with quality/style options
-- GPT Image 1: Text-to-image with multiple inputs
+- GPT Image 1: Text-to-image, image editing (JSON/base64), inpainting
+- GPT Image 1.5: Most advanced model with superior visual understanding
 
 API Reference: https://platform.openai.com/docs/api-reference/images
 """
@@ -50,12 +51,22 @@ class OpenAIProvider(ImageProvider):
         """Generate images using OpenAI API."""
         model_id = request.model.id
         
-        # Choose endpoint based on whether we have reference images
-        if request.reference_images and request.mask:
-            return await self._generate_edit(request)
-        elif request.reference_images:
-            return await self._generate_variation(request)
+        # Choose endpoint based on model type and whether we have reference images
+        if request.reference_images or request.mask:
+            # Image editing / image-to-image mode
+            if model_id.startswith("gpt-image"):
+                # GPT Image models use JSON body with base64 images
+                return await self._generate_gpt_edit(request)
+            elif model_id == "dall-e-2":
+                # DALL-E 2 uses multipart form
+                if request.mask:
+                    return await self._generate_edit_dalle2(request)
+                else:
+                    return await self._generate_variation(request)
+            else:
+                raise GenerationError(f"Model {model_id} does not support image editing")
         else:
+            # Text-to-image generation
             return await self._generate_create(request)
     
     async def _generate_create(self, request: GenerationRequest) -> GenerationResult:
@@ -68,30 +79,80 @@ class OpenAIProvider(ImageProvider):
             "prompt": request.prompt,
             "n": min(request.num_images, request.model.max_images),
             "size": f"{request.width}x{request.height}",
-            "response_format": "b64_json",
         }
+        
+        # GPT Image models return base64 by default, but DALL-E needs explicit format
+        if not request.model.id.startswith("gpt-image"):
+            body["response_format"] = "b64_json"
         
         # Add model-specific parameters
         extra = request.model.validate_params(request.extra_params)
-        if "quality" in extra:
-            body["quality"] = extra["quality"]
-        if "style" in extra:
-            body["style"] = extra["style"]
-        if "background" in extra:
-            body["background"] = extra["background"]
+        for param in ("quality", "style", "background", "output_format", "moderation"):
+            if param in extra:
+                body[param] = extra[param]
         
         response = await self._post(url, body)
         return self._parse_response(response, request)
     
-    async def _generate_edit(self, request: GenerationRequest) -> GenerationResult:
-        """Image editing / inpainting."""
+    async def _generate_gpt_edit(self, request: GenerationRequest) -> GenerationResult:
+        """GPT Image model editing via JSON body with base64 images.
+        
+        GPT Image models (gpt-image-1, gpt-image-1.5) accept:
+        - image: Array of base64 data URIs or URLs
+        - mask: Optional base64 data URI for inpainting
+        - All GPT-specific params: quality, background, input_fidelity, etc.
+        """
+        url = f"{self.base_url}/images/edits"
+        
+        # Convert images to base64 data URIs
+        images = []
+        for img in request.reference_images:
+            img_bytes = self._image_to_png_bytes(img)
+            b64 = base64.b64encode(img_bytes).decode()
+            images.append(f"data:image/png;base64,{b64}")
+        
+        # Build size - use "auto" if width/height not explicitly set
+        size = f"{request.width}x{request.height}"
+        if size == "1024x1024" and "auto" in (request.model.resolutions or []):
+            size = "auto"
+        
+        body: dict[str, Any] = {
+            "model": request.model.id,
+            "prompt": request.prompt,
+            "image": images,  # Array of base64 data URIs
+            "n": min(request.num_images, request.model.max_images),
+            "size": size,
+        }
+        
+        # Add mask if present (for inpainting)
+        if request.mask:
+            mask_bytes = self._mask_to_png_bytes(request.mask)
+            b64_mask = base64.b64encode(mask_bytes).decode()
+            body["mask"] = f"data:image/png;base64,{b64_mask}"
+        
+        # Add GPT Image specific parameters
+        extra = request.model.validate_params(request.extra_params)
+        for param in ("quality", "background", "input_fidelity", "output_format", "moderation"):
+            if param in extra:
+                body[param] = extra[param]
+        
+        response = await self._post(url, body)
+        return self._parse_response(response, request)
+    
+    async def _generate_edit_dalle2(self, request: GenerationRequest) -> GenerationResult:
+        """DALL-E 2 image editing / inpainting via multipart form.
+        
+        DALL-E 2 requires:
+        - image: PNG file, square, < 4MB
+        - mask: PNG file with transparent areas for editing
+        """
         url = f"{self.base_url}/images/edits"
         
         # Prepare multipart form data
         form = aiohttp.FormData()
-        form.add_field("model", request.model.id)
+        form.add_field("model", "dall-e-2")
         form.add_field("prompt", request.prompt)
-        form.add_field("n", str(request.num_images))
+        form.add_field("n", str(min(request.num_images, 10)))
         form.add_field("size", f"{request.width}x{request.height}")
         form.add_field("response_format", "b64_json")
         
@@ -109,12 +170,12 @@ class OpenAIProvider(ImageProvider):
         return self._parse_response(response, request)
     
     async def _generate_variation(self, request: GenerationRequest) -> GenerationResult:
-        """Generate variations of an image."""
+        """Generate variations of an image (DALL-E 2 only)."""
         url = f"{self.base_url}/images/variations"
         
         form = aiohttp.FormData()
         form.add_field("model", "dall-e-2")  # Only DALL-E 2 supports variations
-        form.add_field("n", str(request.num_images))
+        form.add_field("n", str(min(request.num_images, 10)))
         form.add_field("size", f"{request.width}x{request.height}")
         form.add_field("response_format", "b64_json")
         

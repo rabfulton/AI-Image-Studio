@@ -2,12 +2,13 @@
 Black Forest Labs Provider - FLUX models.
 
 Supports:
-- FLUX Pro: High quality text-to-image
-- FLUX Pro 1.1: Latest version with improvements
+- FLUX 2 Pro/Max: Latest generation
+- FLUX Kontext Pro/Max: Image editing
+- FLUX Pro 1.1 Ultra/Pro: High quality text-to-image
 - FLUX Dev: Development model with img2img
 - FLUX Schnell: Fast inference
 
-API Reference: https://docs.bfl.ml/
+API Reference: https://docs.bfl.ai/
 Note: BFL uses async polling for results
 """
 
@@ -37,13 +38,13 @@ class BFLProvider(ImageProvider):
     """
     Black Forest Labs image generation provider.
     
-    Handles FLUX Pro, FLUX Dev, and FLUX Schnell models.
+    Handles FLUX Pro, FLUX Dev, FLUX Schnell, and FLUX Kontext models.
     Uses async polling pattern for generation.
     """
     
     id = "bfl"
     name = "Black Forest Labs"
-    base_url = "https://api.bfl.ml/v1"
+    base_url = "https://api.bfl.ai/v1"
     
     def __init__(self, config: ProviderConfig):
         super().__init__(config)
@@ -61,26 +62,19 @@ class BFLProvider(ImageProvider):
         """Generate images using BFL API."""
         model_id = request.model.id
         
-        # Choose endpoint based on model
-        if model_id == "flux-pro-1.1":
-            endpoint = "flux-pro-1.1"
-        elif model_id == "flux-pro":
-            endpoint = "flux-pro"
-        elif model_id == "flux-dev":
-            endpoint = "flux-dev"
-        elif model_id == "flux-schnell":
-            endpoint = "flux-schnell"
-        else:
-            endpoint = model_id
-        
+        # Model ID is the endpoint name
+        endpoint = model_id
         url = f"{self.base_url}/{endpoint}"
         
         # Build request body
         body: dict[str, Any] = {
             "prompt": request.prompt,
-            "width": request.width,
-            "height": request.height,
         }
+        
+        # Add dimensions unless using Kontext (which uses aspect_ratio)
+        if not model_id.startswith("flux-kontext"):
+            body["width"] = request.width
+            body["height"] = request.height
         
         # Add optional parameters based on model
         extra = request.model.validate_params(request.extra_params)
@@ -95,10 +89,17 @@ class BFLProvider(ImageProvider):
             body["safety_tolerance"] = int(extra["safety_tolerance"])
         if "prompt_upsampling" in extra:
             body["prompt_upsampling"] = extra["prompt_upsampling"]
+        if "output_format" in extra:
+            body["output_format"] = extra["output_format"]
         
-        # Handle image-to-image for FLUX Dev
+        # Handle image input for editing
         if request.reference_images and request.model.supports_img2img:
-            body["image_prompt"] = self._image_to_base64(request.reference_images[0])
+            if model_id.startswith("flux-kontext"):
+                # Kontext uses input_image parameter
+                body["input_image"] = self._image_to_base64(request.reference_images[0])
+            else:
+                # FLUX Dev uses image_prompt parameter
+                body["image_prompt"] = self._image_to_base64(request.reference_images[0])
         
         # Submit generation request
         task_id = await self._submit_generation(url, body)

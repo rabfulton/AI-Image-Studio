@@ -2,6 +2,8 @@
 
 A powerful, Linux-native AI image generation and editing application.
 
+![AI Image Studio Screenshot](screenshots/ai_image_studio.png)
+
 ## Features
 
 - **Node-based workflows** - Build flexible, reproducible image processing pipelines
