@@ -279,27 +279,11 @@ class MainWindow(QMainWindow):
         self._console_dock.setWidget(self._console_panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._console_dock)
         
-        # Queue dock (bottom)
-        self._queue_dock = QDockWidget("Queue", self)
-        self._queue_dock.setObjectName("queue_dock")
-        self._queue_dock.setAllowedAreas(
-            Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.TopDockWidgetArea
-        )
-        queue_placeholder = QLabel("Queue (Pending jobs)")
-        queue_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._queue_dock.setWidget(queue_placeholder)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._queue_dock)
-        
-        # Tab console and queue together
-        self.tabifyDockWidget(self._console_dock, self._queue_dock)
-        self._console_dock.raise_()
-        
         # Add toggle actions to View menu
         self._view_menu.addAction(self._node_library_dock.toggleViewAction())
         self._view_menu.addAction(self._properties_dock.toggleViewAction())
         self._view_menu.addAction(self._gallery_dock.toggleViewAction())
         self._view_menu.addAction(self._console_dock.toggleViewAction())
-        self._view_menu.addAction(self._queue_dock.toggleViewAction())
     
     def _setup_status_bar(self) -> None:
         """Create and configure the status bar."""
@@ -395,6 +379,12 @@ class MainWindow(QMainWindow):
                 # Set type_id in visual node
                 if visual_id in self._node_graph_canvas._nodes:
                     self._node_graph_canvas._nodes[visual_id].type_id = type_id
+                
+                # Reload preview images from file path parameters
+                for pname in ("file", "image_path", "input_image"):
+                    if pname in params and params[pname]:
+                        self._update_node_image_preview(visual_id, params[pname])
+                        break
             
             # Restore connections
             for conn_data in data.get("connections", []):
@@ -420,6 +410,14 @@ class MainWindow(QMainWindow):
             node_count = len(data.get("nodes", []))
             if node_count > 0:
                 self._console_panel.log_info(f"Restored {node_count} nodes from last session")
+            
+            # Restore viewport state (zoom/pan)
+            viewport = data.get("viewport", {})
+            if viewport:
+                self._node_graph_canvas._transform.zoom = viewport.get("zoom", 1.0)
+                self._node_graph_canvas._transform.offset_x = viewport.get("offset_x", 0.0)
+                self._node_graph_canvas._transform.offset_y = viewport.get("offset_y", 0.0)
+                self._node_graph_canvas.update()
                 
         except Exception as e:
             print(f"Failed to load session: {e}")
@@ -530,11 +528,20 @@ class MainWindow(QMainWindow):
         from ai_image_studio.core.workspace import save_workspace, get_last_session_path
         
         try:
+            # Get current viewport state
+            transform = self._node_graph_canvas._transform
+            viewport_state = {
+                "zoom": transform.zoom,
+                "offset_x": transform.offset_x,
+                "offset_y": transform.offset_y,
+            }
+            
             save_workspace(
                 graph=self._graph,
                 node_id_map=self._node_id_map,
                 visual_nodes=self._node_graph_canvas._nodes,
                 connections=self._node_graph_canvas._connections,
+                viewport_state=viewport_state,
                 path=get_last_session_path(),
                 name="_last_session",
             )

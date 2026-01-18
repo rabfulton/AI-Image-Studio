@@ -103,12 +103,6 @@ class NodeLibraryPanel(QWidget):
         """)
         
         layout.addWidget(self._tree)
-        
-        # Info label at bottom
-        self._info_label = QLabel("Double-click or drag to add")
-        self._info_label.setStyleSheet("color: #6c7086; font-size: 11px;")
-        self._info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self._info_label)
     
     def _populate_default_nodes(self) -> None:
         """Populate the tree with default node types."""

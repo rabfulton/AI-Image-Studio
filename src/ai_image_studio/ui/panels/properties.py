@@ -229,8 +229,6 @@ class PropertiesPanel(QWidget):
         # Create widget based on type
         widget: QWidget | None = None
         
-        print(f"DEBUG _add_parameter_widget: name={name}, param_type={param_def.param_type}, type={type(param_def.param_type)}")
-        
         if param_def.param_type == ParameterType.TEXT:
             widget = QLineEdit()
             widget.setText(str(value) if value else "")

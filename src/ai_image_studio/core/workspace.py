@@ -31,6 +31,7 @@ def save_workspace(
     node_id_map: dict[str, UUID],
     visual_nodes: dict[str, Any],
     connections: list[tuple[str, str, str, str]],
+    viewport_state: dict[str, float] | None = None,
     path: Path | None = None,
     name: str = "workspace",
 ) -> Path:
@@ -79,6 +80,7 @@ def save_workspace(
         "saved_at": datetime.now().isoformat(),
         "nodes": nodes_data,
         "connections": connections_data,
+        "viewport": viewport_state or {"zoom": 1.0, "offset_x": 0.0, "offset_y": 0.0},
     }
     
     # Determine save path

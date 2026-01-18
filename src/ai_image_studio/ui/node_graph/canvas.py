@@ -142,6 +142,7 @@ class NodeGraphCanvas(QWidget):
     SOCKET_RADIUS = 6
     SOCKET_SPACING = 24
     GRID_SIZE = 20
+    THUMBNAIL_SIZE = 64  # Base size before DPI scaling
     
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -262,6 +263,8 @@ class NodeGraphCanvas(QWidget):
     def set_node_preview(self, node_id: str, image) -> None:
         """Set the preview thumbnail for a node (PIL Image or QImage)."""
         if node_id in self._nodes:
+            node = self._nodes[node_id]
+            
             # Convert PIL Image to QImage if needed
             if image is not None and hasattr(image, 'tobytes'):
                 # It's a PIL Image - convert to QImage
@@ -275,9 +278,15 @@ class NodeGraphCanvas(QWidget):
                 
                 data = image.tobytes("raw", "RGBA")
                 qimg = QImage(data, image.width, image.height, fmt)
-                self._nodes[node_id].preview_image = qimg.copy()  # Copy to own the data
+                node.preview_image = qimg.copy()  # Copy to own the data
             else:
-                self._nodes[node_id].preview_image = image
+                node.preview_image = image
+            
+            # Recalculate node height to fit thumbnail
+            has_preview = bool(node.preview_image is not None)
+            node.height = self._calculate_node_height(
+                node.inputs, node.outputs, has_preview
+            )
             
             self.update()
     
@@ -490,24 +499,26 @@ class NodeGraphCanvas(QWidget):
         if node.preview_image is not None:
             from PySide6.QtGui import QImage, QPixmap
             
-            # Calculate preview area (after header, before sockets)
-            preview_margin = 8 * self._transform.zoom
-            preview_size = min(sw - 20 * self._transform.zoom, 80 * self._transform.zoom)
-            preview_x = sx + (sw - preview_size) / 2
-            preview_y = sy + header_h + preview_margin
+            # Get DPI-aware thumbnail size
+            dpr = self.devicePixelRatioF() if hasattr(self, 'devicePixelRatioF') else 1.0
+            base_thumb_size = self.THUMBNAIL_SIZE * dpr
+            thumb_size = base_thumb_size * self._transform.zoom
             
-            # Draw the preview
+            # Position: left side, below header, with margin
+            margin = 8 * self._transform.zoom
+            preview_x = sx + margin
+            preview_y = sy + header_h + margin
+            
+            # Draw the preview (left-aligned, away from output socket on right)
             if isinstance(node.preview_image, QImage):
                 pixmap = QPixmap.fromImage(node.preview_image)
                 scaled = pixmap.scaled(
-                    int(preview_size), int(preview_size),
+                    int(thumb_size), int(thumb_size),
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation
                 )
-                # Center the scaled image
-                offset_x = (preview_size - scaled.width()) / 2
-                offset_y = (preview_size - scaled.height()) / 2
-                painter.drawPixmap(int(preview_x + offset_x), int(preview_y + offset_y), scaled)
+                # Left-align within the preview area
+                painter.drawPixmap(int(preview_x), int(preview_y), scaled)
         
         # Sockets
         socket_font = QFont(self._socket_font)
@@ -655,10 +666,18 @@ class NodeGraphCanvas(QWidget):
         self,
         inputs: list[tuple[str, str]],
         outputs: list[tuple[str, str]],
+        has_preview: bool = False,
     ) -> float:
-        """Calculate node height based on sockets."""
+        """Calculate node height based on sockets and optional preview."""
         num_sockets = max(len(inputs), len(outputs), 1)
-        return self.NODE_HEADER_HEIGHT + self.NODE_PADDING * 2 + num_sockets * self.SOCKET_SPACING
+        base_height = self.NODE_HEADER_HEIGHT + self.NODE_PADDING * 2 + num_sockets * self.SOCKET_SPACING
+        
+        if has_preview:
+            # Add space for thumbnail + margins
+            thumbnail_height = self.THUMBNAIL_SIZE + self.NODE_PADDING * 2
+            return max(base_height, self.NODE_HEADER_HEIGHT + thumbnail_height)
+        
+        return base_height
     
     def _get_socket_position(
         self,

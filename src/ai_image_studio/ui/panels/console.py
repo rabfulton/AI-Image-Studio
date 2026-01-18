@@ -168,6 +168,33 @@ class ConsolePanel(QWidget):
         
         self._tabs.addTab(progress_widget, "Progress")
         
+        # Queue tab
+        queue_widget = QWidget()
+        queue_layout = QVBoxLayout(queue_widget)
+        queue_layout.setContentsMargins(16, 16, 16, 16)
+        queue_layout.setSpacing(12)
+        
+        self._queue_label = QLabel("Pending Jobs")
+        self._queue_label.setStyleSheet("color: #cdd6f4; font-weight: bold;")
+        queue_layout.addWidget(self._queue_label)
+        
+        self._queue_list = QTextEdit()
+        self._queue_list.setReadOnly(True)
+        self._queue_list.setStyleSheet("""
+            QTextEdit {
+                background-color: #11111b;
+                color: #cdd6f4;
+                font-family: 'Fira Code', 'Consolas', monospace;
+                font-size: 12px;
+                border: none;
+                padding: 8px;
+            }
+        """)
+        self._queue_list.setPlainText("No pending jobs")
+        queue_layout.addWidget(self._queue_list)
+        
+        self._tabs.addTab(queue_widget, "Queue")
+        
         layout.addWidget(self._tabs)
         
         # Message counter
