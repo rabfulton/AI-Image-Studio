@@ -33,6 +33,7 @@ from PySide6.QtGui import QImage, QPixmap, QMouseEvent, QAction
 
 if TYPE_CHECKING:
     from ai_image_studio.core.data_types import ImageData
+    from ai_image_studio.core.workflow_metadata import WorkflowMetadata
 
 
 @dataclass
@@ -46,6 +47,7 @@ class GalleryItem:
     model: str = ""
     timestamp: datetime = field(default_factory=datetime.now)
     saved_path: Path | None = None
+    workflow_path: Path | None = None
 
 
 class ThumbnailWidget(QFrame):
@@ -143,6 +145,7 @@ class GalleryPanel(QWidget):
     
     image_selected = Signal(str)  # item_id
     image_load_requested = Signal(str)  # item_id
+    workflow_load_requested = Signal(str)  # item_id - emitted when Load button clicked
     
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -174,6 +177,14 @@ class GalleryPanel(QWidget):
         header_layout.addWidget(self._count_label)
         
         header_layout.addStretch()
+        
+        # Load workflow button
+        self._load_btn = QPushButton("Load")
+        self._load_btn.setToolTip("Load image and workflow into workspace")
+        self._load_btn.setFixedWidth(48)
+        self._load_btn.clicked.connect(self._on_load_selected)
+        self._load_btn.setEnabled(False)  # Disabled until selection
+        header_layout.addWidget(self._load_btn)
         
         open_folder_btn = QPushButton("📂")
         open_folder_btn.setToolTip("Open gallery folder")
@@ -215,6 +226,7 @@ class GalleryPanel(QWidget):
         prompt: str = "",
         model: str = "",
         auto_save: bool = True,
+        workflow_metadata: "WorkflowMetadata | None" = None,
     ) -> str:
         """
         Add an image to the gallery.
@@ -224,6 +236,7 @@ class GalleryPanel(QWidget):
             prompt: Generation prompt
             model: Model used
             auto_save: Whether to save to disk
+            workflow_metadata: Optional workflow state to save alongside image
         
         Returns:
             Item ID
@@ -263,6 +276,14 @@ class GalleryPanel(QWidget):
         # Auto-save
         if auto_save:
             item.saved_path = self._save_image(item)
+            
+            # Save workflow metadata if provided
+            if workflow_metadata and item.saved_path:
+                from ai_image_studio.core.workflow_metadata import save_workflow_metadata
+                try:
+                    item.workflow_path = save_workflow_metadata(item.saved_path, workflow_metadata)
+                except Exception as e:
+                    print(f"Failed to save workflow metadata: {e}")
         
         self._items[item.id] = item
         
@@ -323,6 +344,9 @@ class GalleryPanel(QWidget):
         self._selected_id = item_id
         if item_id in self._widgets:
             self._widgets[item_id].set_selected(True)
+        
+        # Enable Load button when selection exists
+        self._load_btn.setEnabled(True)
         
         self.image_selected.emit(item_id)
     
@@ -395,6 +419,11 @@ class GalleryPanel(QWidget):
             except Exception as e:
                 print(f"Failed to delete file {item.saved_path}: {e}")
         
+        # Delete associated workflow file (do NOT clear workflow from interface)
+        if item and item.saved_path:
+            from ai_image_studio.core.workflow_metadata import delete_workflow_metadata
+            delete_workflow_metadata(item.saved_path)
+        
         # Remove widget
         widget = self._widgets.pop(item_id, None)
         if widget:
@@ -429,6 +458,11 @@ class GalleryPanel(QWidget):
                 subprocess.Popen(["explorer", path])
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not open folder: {e}")
+    
+    def _on_load_selected(self) -> None:
+        """Handle Load button click - load selected image's workflow."""
+        if self._selected_id:
+            self.workflow_load_requested.emit(self._selected_id)
     
     def get_item(self, item_id: str) -> GalleryItem | None:
         """Get a gallery item by ID."""
@@ -488,6 +522,12 @@ class GalleryPanel(QWidget):
                     timestamp=ts,
                     saved_path=path,
                 )
+                
+                # Check for associated workflow file
+                from ai_image_studio.core.workflow_metadata import get_workflow_path
+                workflow_path = get_workflow_path(path)
+                if workflow_path.exists():
+                    item.workflow_path = workflow_path
                 
                 self._items[item.id] = item
                 

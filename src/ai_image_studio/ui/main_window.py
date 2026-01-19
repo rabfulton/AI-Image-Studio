@@ -263,6 +263,8 @@ class MainWindow(QMainWindow):
         )
         self._gallery_panel = GalleryPanel()
         self._gallery_panel.image_load_requested.connect(self._on_gallery_load)
+        self._gallery_panel.image_selected.connect(self._on_gallery_preview)
+        self._gallery_panel.workflow_load_requested.connect(self._on_workflow_load)
         self._gallery_dock.setWidget(self._gallery_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._gallery_dock)
         
@@ -794,12 +796,14 @@ class MainWindow(QMainWindow):
                         node = self._graph.get_node(node_id)
                         prompt = node.get_parameter("prompt", "") if node else ""
                     
-                    # Add to gallery
+                    # Add to gallery with workflow metadata
+                    workflow_metadata = self._get_current_workflow_metadata()
                     self._gallery_panel.add_image(
                         image_data,
                         prompt=prompt,
                         model=result.get("model_id", ""),
                         auto_save=True,
+                        workflow_metadata=workflow_metadata,
                     )
                     
                     self._console_panel.log_info("Image added to Gallery")
@@ -850,6 +854,186 @@ class MainWindow(QMainWindow):
         
         self._console_panel.log_info(f"Loaded image from gallery")
         self.statusBar().showMessage("Image loaded from gallery", 2000)
+    
+    def _on_gallery_preview(self, item_id: str) -> None:
+        """Display image in Output Studio on single-click (without loading workflow)."""
+        item = self._gallery_panel.get_item(item_id)
+        if not item:
+            return
+        
+        # Show image in preview
+        if item.image_data:
+            self._output_studio.set_image_from_data(item.image_data)
+        elif item.qimage:
+            self._output_studio.set_image(item.qimage)
+    
+    def _on_workflow_load(self, item_id: str) -> None:
+        """Load workflow from gallery item - restores full node graph."""
+        item = self._gallery_panel.get_item(item_id)
+        if not item:
+            return
+        
+        # First display the image
+        if item.image_data:
+            self._output_studio.set_image_from_data(item.image_data)
+        elif item.qimage:
+            self._output_studio.set_image(item.qimage)
+        
+        # Check if workflow metadata exists
+        if not item.workflow_path or not item.workflow_path.exists():
+            self._console_panel.log_warning("No workflow data found for this image")
+            return
+        
+        # Load the workflow metadata
+        from ai_image_studio.core.workflow_metadata import load_workflow_metadata
+        try:
+            metadata = load_workflow_metadata(item.saved_path)
+            if not metadata:
+                self._console_panel.log_warning("Could not load workflow metadata")
+                return
+        except Exception as e:
+            self._console_panel.log_error(f"Failed to load workflow: {e}")
+            return
+        
+        # Clear current graph and canvas
+        self._graph.clear()
+        self._node_id_map.clear()
+        self._node_graph_canvas._nodes.clear()
+        self._node_graph_canvas._connections.clear()
+        self._node_graph_canvas.update()
+        
+        # Restore nodes and connections (similar to _load_session)
+        from ai_image_studio.core.graph import Node, Point2D, Connection
+        from ai_image_studio.core.node_types import NodeRegistry
+        
+        registry = NodeRegistry.instance()
+        
+        for node_data in metadata.nodes:
+            visual_id = node_data["id"]
+            type_id = node_data["type_id"]
+            x = node_data["x"]
+            y = node_data["y"]
+            params = node_data.get("parameters", {})
+            
+            # Create core node
+            core_node = Node.create(type_id, position=Point2D(x=x, y=y))
+            for key, value in params.items():
+                core_node.set_parameter(key, value)
+            
+            self._graph.add_node(core_node)
+            self._node_id_map[visual_id] = core_node.id
+            
+            # Get node type for visual info
+            node_type = registry.get(type_id)
+            parts = type_id.split(".")
+            category = parts[0] if parts else "utility"
+            
+            if node_type:
+                title = node_type.name
+                inputs = [(inp.name, inp.data_type.name) for inp in node_type.inputs]
+                outputs = [(out.name, out.data_type.name) for out in node_type.outputs]
+            else:
+                title = parts[-1].replace("_", " ").title()
+                inputs, outputs = [], []
+            
+            # Add visual node
+            self._node_graph_canvas.add_visual_node(
+                node_id=visual_id,
+                x=x, y=y,
+                title=title,
+                category=category,
+                inputs=inputs,
+                outputs=outputs,
+            )
+            
+            if visual_id in self._node_graph_canvas._nodes:
+                self._node_graph_canvas._nodes[visual_id].type_id = type_id
+            
+            # Reload preview images
+            for pname in ("file", "image_path", "input_image"):
+                if pname in params and params[pname]:
+                    self._update_node_image_preview(visual_id, params[pname])
+                    break
+        
+        # Restore connections
+        for conn_data in metadata.connections:
+            src = conn_data["source"]
+            src_out = conn_data["source_output"]
+            tgt = conn_data["target"]
+            tgt_in = conn_data["target_input"]
+            
+            self._node_graph_canvas.add_visual_connection(src, src_out, tgt, tgt_in)
+            
+            if src in self._node_id_map and tgt in self._node_id_map:
+                conn = Connection.create(
+                    source_node=self._node_id_map[src],
+                    source_output=src_out,
+                    target_node=self._node_id_map[tgt],
+                    target_input=tgt_in,
+                )
+                self._graph.add_connection(conn)
+        
+        # Restore viewport
+        viewport = metadata.viewport
+        if viewport:
+            self._node_graph_canvas._transform.zoom = viewport.get("zoom", 1.0)
+            self._node_graph_canvas._transform.offset_x = viewport.get("offset_x", 0.0)
+            self._node_graph_canvas._transform.offset_y = viewport.get("offset_y", 0.0)
+        
+        self._node_graph_canvas.update()
+        
+        node_count = len(metadata.nodes)
+        self._console_panel.log_success(f"Loaded workflow with {node_count} nodes")
+        self.statusBar().showMessage("Workflow loaded from gallery", 3000)
+    
+    def _get_current_workflow_metadata(self):
+        """
+        Capture current workflow state for saving alongside gallery images.
+        
+        Returns:
+            WorkflowMetadata with current graph state
+        """
+        from ai_image_studio.core.workflow_metadata import WorkflowMetadata
+        
+        # Serialize nodes
+        nodes_data = []
+        for visual_id, core_uuid in self._node_id_map.items():
+            core_node = self._graph.get_node(core_uuid)
+            visual = self._node_graph_canvas._nodes.get(visual_id)
+            
+            if core_node and visual:
+                nodes_data.append({
+                    "id": visual_id,
+                    "type_id": core_node.type_id,
+                    "x": visual.x,
+                    "y": visual.y,
+                    "parameters": core_node.parameters,
+                })
+        
+        # Serialize connections
+        connections_data = [
+            {
+                "source": src,
+                "source_output": src_out,
+                "target": tgt,
+                "target_input": tgt_in,
+            }
+            for src, src_out, tgt, tgt_in in self._node_graph_canvas._connections
+        ]
+        
+        # Get viewport state
+        transform = self._node_graph_canvas._transform
+        viewport_state = {
+            "zoom": transform.zoom,
+            "offset_x": transform.offset_x,
+            "offset_y": transform.offset_y,
+        }
+        
+        return WorkflowMetadata(
+            nodes=nodes_data,
+            connections=connections_data,
+            viewport=viewport_state,
+        )
     
     def _on_manage_providers(self) -> None:
         """Open the provider management dialog."""
