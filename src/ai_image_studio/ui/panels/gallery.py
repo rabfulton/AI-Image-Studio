@@ -175,10 +175,11 @@ class GalleryPanel(QWidget):
         
         header_layout.addStretch()
         
-        clear_btn = QPushButton("Clear")
-        clear_btn.setFixedWidth(50)
-        clear_btn.clicked.connect(self._on_clear)
-        header_layout.addWidget(clear_btn)
+        open_folder_btn = QPushButton("📂")
+        open_folder_btn.setToolTip("Open gallery folder")
+        open_folder_btn.setFixedWidth(32)
+        open_folder_btn.clicked.connect(self._on_open_folder)
+        header_layout.addWidget(open_folder_btn)
         
         layout.addWidget(header)
         
@@ -411,20 +412,23 @@ class GalleryPanel(QWidget):
         if not self._items:
             self._empty_label.show()
     
-    def _on_clear(self) -> None:
-        """Clear all items."""
-        if not self._items:
-            return
+    def _on_open_folder(self) -> None:
+        """Open gallery folder in system file manager."""
+        import subprocess
+        import platform
         
-        reply = QMessageBox.question(
-            self, "Clear Gallery",
-            f"Delete all {len(self._items)} images from gallery?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        path = str(self._gallery_path)
+        system = platform.system()
         
-        if reply == QMessageBox.StandardButton.Yes:
-            for item_id in list(self._items.keys()):
-                self._delete_item(item_id)
+        try:
+            if system == "Linux":
+                subprocess.Popen(["xdg-open", path])
+            elif system == "Darwin":
+                subprocess.Popen(["open", path])
+            elif system == "Windows":
+                subprocess.Popen(["explorer", path])
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not open folder: {e}")
     
     def get_item(self, item_id: str) -> GalleryItem | None:
         """Get a gallery item by ID."""
