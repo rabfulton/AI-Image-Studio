@@ -365,6 +365,7 @@ class PropertiesPanel(QWidget):
             # Get available models from provider registry
             try:
                 from ai_image_studio.providers import get_registry
+                from ai_image_studio.providers.base import GenerationMode
                 registry = get_registry()
                 
                 # First try configured providers only
@@ -372,6 +373,14 @@ class PropertiesPanel(QWidget):
                 if not models:
                     # Fall back to all models
                     models = registry.list_models()
+                
+                # Filter by mode if specified (e.g., "upscale" for upscaler nodes)
+                if param_def.mode_filter:
+                    try:
+                        mode = GenerationMode(param_def.mode_filter)
+                        models = [m for m in models if mode in m.modes]
+                    except ValueError:
+                        pass  # Invalid mode filter, show all
                 
                 for model in models:
                     widget.addItem(f"{model.name} ({model.provider})", model.id)

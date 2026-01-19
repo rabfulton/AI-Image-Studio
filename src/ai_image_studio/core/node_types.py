@@ -122,6 +122,7 @@ class ParameterDefinition:
     step: float | None = None
     options: list[EnumOption] = field(default_factory=list)
     file_filter: str = ""  # e.g., "Images (*.png *.jpg)"
+    mode_filter: str | None = None  # For MODEL type: filter by GenerationMode (e.g., "upscale")
     description: str = ""
     
     @classmethod

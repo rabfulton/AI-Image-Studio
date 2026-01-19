@@ -626,6 +626,93 @@ BUILTIN_MODEL_CARDS: dict[str, ModelCard] = {
         pricing_tier="budget",
         tags=["fast", "affordable"],
     ),
+    
+    # -------------------------------------------------------------------------
+    # Stability AI Upscalers
+    # Source: https://platform.stability.ai/docs/api-reference#tag/Upscale
+    # -------------------------------------------------------------------------
+    "stability-upscale-conservative": ModelCard(
+        id="stability-upscale-conservative",
+        provider="stability",
+        name="Conservative Upscale",
+        description="Upscale 20-40x with minimal changes, preserves original details",
+        modes={GenerationMode.UPSCALE},
+        max_images=1,
+        max_reference_images=1,
+        params={"prompt", "output_format", "creativity"},
+        param_options={
+            "output_format": ["png", "jpeg", "webp"],
+        },
+        param_defaults={"output_format": "png", "creativity": 0.2},
+        pricing_tier="standard",
+        tags=["upscale", "conservative"],
+    ),
+    
+    "stability-upscale-creative": ModelCard(
+        id="stability-upscale-creative",
+        provider="stability",
+        name="Creative Upscale",
+        description="Upscale with creative enhancement for degraded images (<1MP)",
+        modes={GenerationMode.UPSCALE},
+        max_images=1,
+        max_reference_images=1,
+        params={"prompt", "output_format", "creativity", "seed"},
+        param_options={
+            "output_format": ["png", "jpeg", "webp"],
+        },
+        param_defaults={"output_format": "png"},
+        pricing_tier="standard",
+        tags=["upscale", "creative"],
+    ),
+    
+    "stability-upscale-fast": ModelCard(
+        id="stability-upscale-fast",
+        provider="stability",
+        name="Fast Upscale",
+        description="4x upscale in ~1 second using predictive AI",
+        modes={GenerationMode.UPSCALE},
+        max_images=1,
+        max_reference_images=1,
+        params={"output_format"},
+        param_options={
+            "output_format": ["png", "jpeg", "webp"],
+        },
+        param_defaults={"output_format": "png"},
+        pricing_tier="budget",
+        tags=["upscale", "fast"],
+    ),
+    
+    # -------------------------------------------------------------------------
+    # Local Upscalers (Real-ESRGAN)
+    # Provider: upscaler (local, no API key needed)
+    # -------------------------------------------------------------------------
+    "local-realesrgan-x4": ModelCard(
+        id="local-realesrgan-x4",
+        provider="upscaler",
+        name="Real-ESRGAN x4",
+        description="Local 4x upscaling with Real-ESRGAN (free, runs locally)",
+        modes={GenerationMode.UPSCALE},
+        max_images=1,
+        max_reference_images=1,
+        params={"denoise_strength", "tile_size"},
+        param_defaults={"denoise_strength": 0.5, "tile_size": 512},
+        pricing_tier="free",
+        tags=["upscale", "local", "free"],
+    ),
+    
+    "local-realesrgan-x2": ModelCard(
+        id="local-realesrgan-x2",
+        provider="upscaler",
+        name="Real-ESRGAN x2",
+        description="Local 2x upscaling with Real-ESRGAN (free, runs locally)",
+        modes={GenerationMode.UPSCALE},
+        max_images=1,
+        max_reference_images=1,
+        params={"denoise_strength", "tile_size"},
+        param_defaults={"denoise_strength": 0.5, "tile_size": 512},
+        pricing_tier="free",
+        tags=["upscale", "local", "free"],
+    ),
 }
 
 
@@ -714,8 +801,10 @@ class ProviderRegistry:
         configured = set(self.list_configured_providers())
         # Also include local provider if it has models
         local_models = [m for m in self._model_cards.values() if m.id.startswith("local/")]
+        # Include upscaler models (always available - binary auto-downloads on first use)
+        upscaler_models = [m for m in self._model_cards.values() if m.provider == "upscaler"]
         api_models = [m for m in self._model_cards.values() if m.provider in configured]
-        return api_models + local_models
+        return api_models + local_models + upscaler_models
     
     def refresh_local_models(self) -> int:
         """

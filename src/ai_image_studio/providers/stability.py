@@ -56,7 +56,13 @@ class StabilityProvider(ImageProvider):
     
     async def generate(self, request: GenerationRequest) -> GenerationResult:
         """Generate images using Stability AI API."""
+        from ai_image_studio.providers.base import GenerationMode
+        
         model_id = request.model.id
+        
+        # Route upscale models to dedicated method
+        if GenerationMode.UPSCALE in request.model.modes:
+            return await self._upscale(request)
         
         # Determine endpoint based on model and mode
         # v2beta endpoints:
@@ -280,4 +286,72 @@ class StabilityProvider(ImageProvider):
                 error_msg = str(data) if data else f"HTTP {status}"
             
             raise GenerationError(f"Stability AI error: {error_msg}")
+    
+    async def _upscale(self, request: GenerationRequest) -> GenerationResult:
+        """Upscale an image using Stability AI upscaler endpoints."""
+        model_id = request.model.id
+        
+        # Determine endpoint based on model
+        if model_id == "stability-upscale-conservative":
+            endpoint = "stable-image/upscale/conservative"
+        elif model_id == "stability-upscale-creative":
+            endpoint = "stable-image/upscale/creative"
+        else:  # stability-upscale-fast
+            endpoint = "stable-image/upscale/fast"
+        
+        # Build form data
+        form = aiohttp.FormData(quote_fields=False)
+        
+        # Input image is required
+        if not request.reference_images:
+            raise GenerationError("Input image required for upscaling")
+        
+        image_data = request.reference_images[0]
+        pil_img = image_data.to_pil()
+        buf = BytesIO()
+        pil_img.save(buf, format="PNG")
+        buf.seek(0)
+        form.add_field("image", buf, filename="input.png", content_type="image/png")
+        
+        # Validated extra params
+        extra = request.model.validate_params(request.extra_params)
+        
+        # Optional prompt for guided upscaling (conservative/creative)
+        if request.prompt:
+            form.add_field("prompt", request.prompt, content_type="text/plain")
+        
+        # Creativity parameter (conservative only, 0.1-0.35)
+        if "creativity" in extra and model_id == "stability-upscale-conservative":
+            form.add_field("creativity", str(extra["creativity"]), content_type="text/plain")
+        
+        # Seed (creative only)
+        if "seed" in extra and model_id == "stability-upscale-creative":
+            form.add_field("seed", str(extra["seed"]), content_type="text/plain")
+        
+        # Output format
+        output_format = extra.get("output_format", "png")
+        form.add_field("output_format", output_format, content_type="text/plain")
+        
+        url = f"{self.base_url}/{endpoint}"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "application/json",
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, data=form, headers=headers) as resp:
+                if resp.status >= 400:
+                    try:
+                        error_data = await resp.json()
+                    except Exception:
+                        error_data = {"message": await resp.text()}
+                    self._check_error(resp.status, error_data)
+                
+                # Handle response
+                if resp.content_type.startswith("image/"):
+                    img_bytes = await resp.read()
+                    return self._parse_image_response(img_bytes, request)
+                else:
+                    data = await resp.json()
+                    return self._parse_json_response(data, request)
 

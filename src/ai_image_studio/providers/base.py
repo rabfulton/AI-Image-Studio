@@ -27,6 +27,7 @@ class GenerationMode(Enum):
     IMAGE_TO_IMAGE = "image_to_image"
     INPAINTING = "inpainting"
     OUTPAINTING = "outpainting"
+    UPSCALE = "upscale"
 
 
 @dataclass

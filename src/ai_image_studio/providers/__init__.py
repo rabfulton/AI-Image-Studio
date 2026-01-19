@@ -49,6 +49,7 @@ from ai_image_studio.providers.xai import XAIProvider
 from ai_image_studio.providers.openrouter import OpenRouterProvider
 from ai_image_studio.providers.sd_cpp import SDCppProvider
 from ai_image_studio.providers.stability import StabilityProvider
+from ai_image_studio.providers.upscaler import UpscalerProvider
 
 
 # Auto-register providers
@@ -61,6 +62,7 @@ def _register_providers():
     registry.register_provider(OpenRouterProvider)
     registry.register_provider(SDCppProvider)
     registry.register_provider(StabilityProvider)
+    registry.register_provider(UpscalerProvider)
 
 _register_providers()
 

@@ -14,6 +14,7 @@ from ai_image_studio.nodes.generation import register_generation_nodes
 from ai_image_studio.nodes.input import register_input_nodes
 from ai_image_studio.nodes.output import register_output_nodes
 from ai_image_studio.nodes.filter import register_gmic_nodes
+from ai_image_studio.nodes.enhancement import register_enhancement_nodes
 
 
 def register_all_nodes() -> None:
@@ -22,6 +23,7 @@ def register_all_nodes() -> None:
     register_generation_nodes()
     register_output_nodes()
     register_gmic_nodes()
+    register_enhancement_nodes()
 
 
 __all__ = [

@@ -282,11 +282,17 @@ class NodeGraphCanvas(QWidget):
             else:
                 node.preview_image = image
             
-            # Recalculate node height to fit thumbnail
+            # Recalculate node size to fit thumbnail
             has_preview = bool(node.preview_image is not None)
             node.height = self._calculate_node_height(
                 node.inputs, node.outputs, has_preview
             )
+            
+            # Adjust width for thumbnail: thumbnail + margin + socket label area
+            if has_preview:
+                # thumbnail(64) + margin(8) + socket_label_width(~60) + margin(8)
+                preview_width = self.THUMBNAIL_SIZE + 8 + 60 + 8
+                node.width = max(self.NODE_MIN_WIDTH, preview_width)
             
             self.update()
     
@@ -499,10 +505,8 @@ class NodeGraphCanvas(QWidget):
         if node.preview_image is not None:
             from PySide6.QtGui import QImage, QPixmap
             
-            # Get DPI-aware thumbnail size
-            dpr = self.devicePixelRatioF() if hasattr(self, 'devicePixelRatioF') else 1.0
-            base_thumb_size = self.THUMBNAIL_SIZE * dpr
-            thumb_size = base_thumb_size * self._transform.zoom
+            # Use base thumbnail size (Qt handles DPI scaling)
+            thumb_size = self.THUMBNAIL_SIZE * self._transform.zoom
             
             # Position: left side, below header, with margin
             margin = 8 * self._transform.zoom
@@ -673,9 +677,10 @@ class NodeGraphCanvas(QWidget):
         base_height = self.NODE_HEADER_HEIGHT + self.NODE_PADDING * 2 + num_sockets * self.SOCKET_SPACING
         
         if has_preview:
-            # Add space for thumbnail + margins
-            thumbnail_height = self.THUMBNAIL_SIZE + self.NODE_PADDING * 2
-            return max(base_height, self.NODE_HEADER_HEIGHT + thumbnail_height)
+            # Tight fit: header + small margin + thumbnail + small margin
+            # header(28) + margin(8) + thumbnail(64) + margin(8) = 108
+            thumbnail_height = self.THUMBNAIL_SIZE + 16  # 8px top + 8px bottom margin
+            return self.NODE_HEADER_HEIGHT + thumbnail_height
         
         return base_height
     

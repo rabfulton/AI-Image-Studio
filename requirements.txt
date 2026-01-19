@@ -15,3 +15,7 @@ huggingface-hub>=0.20.0
 # G'MIC image processing filters
 gmic>=3.1.0
 
+# Image upscaling: Local upscaler uses upscayl-ncnn CLI (optional)
+# Install from: https://github.com/upscayl/upscayl-ncnn/releases
+# Or use Stability AI API for cloud-based upscaling
+
