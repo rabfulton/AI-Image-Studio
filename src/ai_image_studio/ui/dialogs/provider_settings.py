@@ -100,6 +100,10 @@ class ProviderSettingsDialog(QDialog):
             ("api_key", "API Key", "Your xAI API key", True),
         ], "https://console.x.ai/")
         
+        self._add_provider_page("stability", "Stability AI", [
+            ("api_key", "API Key", "Your Stability AI key", True),
+        ], "https://platform.stability.ai/account/keys")
+        
         # Local provider (special handling)
         self._add_local_provider_page()
         
@@ -476,7 +480,7 @@ class ProviderSettingsDialog(QDialog):
         from ai_image_studio.providers import get_registry
         registry = get_registry()
         
-        for provider_id in ["openai", "bfl", "openrouter", "gemini", "xai"]:
+        for provider_id in ["openai", "bfl", "openrouter", "gemini", "xai", "stability"]:
             config = registry.get_config(provider_id)
             
             # Set enabled
@@ -523,7 +527,7 @@ class ProviderSettingsDialog(QDialog):
         from ai_image_studio.providers import get_registry, ProviderConfig
         registry = get_registry()
         
-        for provider_id in ["openai", "bfl", "openrouter", "gemini", "xai"]:
+        for provider_id in ["openai", "bfl", "openrouter", "gemini", "xai", "stability"]:
             enabled_cb = self.findChild(QCheckBox, f"{provider_id}_enabled")
             key_edit = self.findChild(QLineEdit, f"{provider_id}_api_key")
             

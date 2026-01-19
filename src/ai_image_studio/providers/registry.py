@@ -508,6 +508,124 @@ BUILTIN_MODEL_CARDS: dict[str, ModelCard] = {
         pricing_tier="standard",
         tags=["text-to-image"],
     ),
+    
+    # -------------------------------------------------------------------------
+    # Stability AI
+    # Source: https://platform.stability.ai/docs/api-reference
+    # -------------------------------------------------------------------------
+    "sd3.5-large": ModelCard(
+        id="sd3.5-large",
+        provider="stability",
+        name="SD 3.5 Large",
+        description="Stable Diffusion 3.5 Large - highest quality generation",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+        max_images=1,
+        params={"seed", "cfg_scale", "style_preset", "output_format", "negative_prompt", "aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+            "style_preset": [
+                "3d-model", "analog-film", "anime", "cinematic", "comic-book",
+                "digital-art", "enhance", "fantasy-art", "isometric", "line-art",
+                "low-poly", "modeling-compound", "neon-punk", "origami",
+                "photographic", "pixel-art", "tile-texture",
+            ],
+            "output_format": ["png", "jpeg", "webp"],
+        },
+        param_defaults={"aspect_ratio": "1:1", "output_format": "png"},
+        pricing_tier="standard",
+        tags=["high-quality", "img2img"],
+    ),
+    
+    "sd3.5-medium": ModelCard(
+        id="sd3.5-medium",
+        provider="stability",
+        name="SD 3.5 Medium",
+        description="Stable Diffusion 3.5 Medium - balanced quality and speed",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+        max_images=1,
+        params={"seed", "cfg_scale", "style_preset", "output_format", "negative_prompt", "aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+            "style_preset": [
+                "3d-model", "analog-film", "anime", "cinematic", "comic-book",
+                "digital-art", "enhance", "fantasy-art", "isometric", "line-art",
+                "low-poly", "modeling-compound", "neon-punk", "origami",
+                "photographic", "pixel-art", "tile-texture",
+            ],
+            "output_format": ["png", "jpeg", "webp"],
+        },
+        param_defaults={"aspect_ratio": "1:1", "output_format": "png"},
+        pricing_tier="budget",
+        tags=["balanced", "img2img"],
+    ),
+    
+    "sd3.5-large-turbo": ModelCard(
+        id="sd3.5-large-turbo",
+        provider="stability",
+        name="SD 3.5 Large Turbo",
+        description="Stable Diffusion 3.5 Large Turbo - optimized for speed",
+        modes={GenerationMode.TEXT_TO_IMAGE, GenerationMode.IMAGE_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+        max_images=1,
+        params={"seed", "cfg_scale", "style_preset", "output_format", "negative_prompt", "aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+            "style_preset": [
+                "3d-model", "analog-film", "anime", "cinematic", "comic-book",
+                "digital-art", "enhance", "fantasy-art", "isometric", "line-art",
+                "low-poly", "modeling-compound", "neon-punk", "origami",
+                "photographic", "pixel-art", "tile-texture",
+            ],
+            "output_format": ["png", "jpeg", "webp"],
+        },
+        param_defaults={"aspect_ratio": "1:1", "output_format": "png"},
+        pricing_tier="budget",
+        tags=["fast", "img2img"],
+    ),
+    
+    "stable-image-ultra": ModelCard(
+        id="stable-image-ultra",
+        provider="stability",
+        name="Stable Image Ultra",
+        description="Stability AI's highest quality premium model",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+        max_images=1,
+        params={"seed", "output_format", "negative_prompt", "aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+            "output_format": ["png", "jpeg", "webp"],
+        },
+        param_defaults={"aspect_ratio": "1:1", "output_format": "png"},
+        pricing_tier="premium",
+        tags=["high-quality", "ultra"],
+    ),
+    
+    "stable-image-core": ModelCard(
+        id="stable-image-core",
+        provider="stability",
+        name="Stable Image Core",
+        description="Stability AI's fast and affordable model",
+        modes={GenerationMode.TEXT_TO_IMAGE},
+        aspect_ratios=["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+        max_images=1,
+        params={"seed", "style_preset", "output_format", "negative_prompt", "aspect_ratio"},
+        param_options={
+            "aspect_ratio": ["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"],
+            "style_preset": [
+                "3d-model", "analog-film", "anime", "cinematic", "comic-book",
+                "digital-art", "enhance", "fantasy-art", "isometric", "line-art",
+                "low-poly", "modeling-compound", "neon-punk", "origami",
+                "photographic", "pixel-art", "tile-texture",
+            ],
+            "output_format": ["png", "jpeg", "webp"],
+        },
+        param_defaults={"aspect_ratio": "1:1", "output_format": "png"},
+        pricing_tier="budget",
+        tags=["fast", "affordable"],
+    ),
 }
 
 

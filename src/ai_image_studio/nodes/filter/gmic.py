@@ -20,7 +20,7 @@ from ai_image_studio.core.node_types import (
 from ai_image_studio.core.data_types import DataType
 
 
-def gmic_filter_executor(
+async def gmic_filter_executor(
     inputs: dict[str, Any],
     parameters: dict[str, Any],
     context: Any,
@@ -130,17 +130,7 @@ GMIC_FILTER_NODE = NodeType(
             default="blur",
             description="Select the filter to apply",
         ),
-        # Default parameters for Gaussian Blur
-        # Note: Properties panel will dynamically show correct params
-        ParameterDefinition.slider(
-            name="sigma",
-            label="Sigma",
-            default=2.0,
-            min_value=0.1,
-            max_value=50.0,
-            step=0.1,
-            description="Blur radius / filter strength",
-        ),
+        # Filter-specific parameters are dynamically added by the properties panel
     ],
     executor=gmic_filter_executor,
 )

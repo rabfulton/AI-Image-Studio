@@ -6,6 +6,7 @@ This package provides integrations with various AI image generation services:
 - BFL: FLUX Pro, FLUX Dev, FLUX Schnell
 - Google Gemini: Imagen 3/4, Gemini Image models
 - xAI: Grok 2 Image
+- Stability AI: Stable Diffusion 3.5, Stable Image
 - OpenRouter: Multi-model proxy
 - Local: stable-diffusion.cpp (CPU/CUDA/Vulkan)
 
@@ -47,6 +48,7 @@ from ai_image_studio.providers.gemini import GeminiProvider
 from ai_image_studio.providers.xai import XAIProvider
 from ai_image_studio.providers.openrouter import OpenRouterProvider
 from ai_image_studio.providers.sd_cpp import SDCppProvider
+from ai_image_studio.providers.stability import StabilityProvider
 
 
 # Auto-register providers
@@ -58,6 +60,7 @@ def _register_providers():
     registry.register_provider(XAIProvider)
     registry.register_provider(OpenRouterProvider)
     registry.register_provider(SDCppProvider)
+    registry.register_provider(StabilityProvider)
 
 _register_providers()
 
@@ -88,4 +91,5 @@ __all__ = [
     "XAIProvider",
     "OpenRouterProvider",
     "SDCppProvider",
+    "StabilityProvider",
 ]

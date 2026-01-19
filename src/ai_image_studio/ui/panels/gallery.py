@@ -384,6 +384,16 @@ class GalleryPanel(QWidget):
         if item_id not in self._items:
             return
         
+        # Get item for file deletion
+        item = self._items.get(item_id)
+        
+        # Delete the saved file from disk
+        if item and item.saved_path and item.saved_path.exists():
+            try:
+                item.saved_path.unlink()
+            except Exception as e:
+                print(f"Failed to delete file {item.saved_path}: {e}")
+        
         # Remove widget
         widget = self._widgets.pop(item_id, None)
         if widget:

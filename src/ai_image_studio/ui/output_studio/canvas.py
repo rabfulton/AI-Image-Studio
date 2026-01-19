@@ -130,13 +130,16 @@ class ImageCanvas(QWidget):
         # Convert to QImage
         pil_img = image_data.to_pil()
         
-        # Convert PIL to QImage
+        # Convert PIL to QImage with explicit bytes_per_line to prevent stride issues
         if pil_img.mode == "RGBA":
             data = pil_img.tobytes("raw", "RGBA")
-            qimg = QImage(data, pil_img.width, pil_img.height, QImage.Format.Format_RGBA8888)
+            bytes_per_line = pil_img.width * 4
+            qimg = QImage(data, pil_img.width, pil_img.height, bytes_per_line, QImage.Format.Format_RGBA8888)
         else:
+            pil_img = pil_img.convert("RGB")
             data = pil_img.tobytes("raw", "RGB")
-            qimg = QImage(data, pil_img.width, pil_img.height, QImage.Format.Format_RGB888)
+            bytes_per_line = pil_img.width * 3
+            qimg = QImage(data, pil_img.width, pil_img.height, bytes_per_line, QImage.Format.Format_RGB888)
         
         # Need to copy because the data goes out of scope
         self.set_image(qimg.copy())
@@ -587,13 +590,16 @@ class OutputStudio(QWidget):
         # Convert ImageData to QImage via PIL
         pil_img = image_data.to_pil()
         
+        # Explicit bytes_per_line prevents stride/alignment issues
         if pil_img.mode == "RGBA":
             data = pil_img.tobytes("raw", "RGBA")
-            qimg = QImage(data, pil_img.width, pil_img.height, QImage.Format.Format_RGBA8888)
+            bytes_per_line = pil_img.width * 4
+            qimg = QImage(data, pil_img.width, pil_img.height, bytes_per_line, QImage.Format.Format_RGBA8888)
         else:
             pil_img = pil_img.convert("RGB")
             data = pil_img.tobytes("raw", "RGB")
-            qimg = QImage(data, pil_img.width, pil_img.height, QImage.Format.Format_RGB888)
+            bytes_per_line = pil_img.width * 3
+            qimg = QImage(data, pil_img.width, pil_img.height, bytes_per_line, QImage.Format.Format_RGB888)
         
         # Must copy - data goes out of scope
         self._single_canvas.set_image(qimg.copy())

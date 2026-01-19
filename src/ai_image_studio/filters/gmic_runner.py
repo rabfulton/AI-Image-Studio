@@ -44,12 +44,9 @@ class GmicRunner:
     """
     
     def __init__(self):
-        """Initialize the G'MIC interpreter."""
+        """Initialize the G'MIC runner."""
         if not GMIC_AVAILABLE:
             raise GmicError("gmic-py is not installed. Install with: pip install gmic")
-        
-        # Create interpreter instance for better performance across calls
-        self._interpreter = gmic.Gmic()
     
     @property
     def is_available(self) -> bool:
@@ -79,30 +76,33 @@ class GmicRunner:
         from ai_image_studio.core.data_types import ImageData
         
         try:
-            # Convert ImageData to G'MIC image list
-            gmic_images = self._to_gmic_images(image)
+            # Convert ImageData to G'MIC image
+            gmic_img = self._to_gmic_image(image)
             
             # Build command with parameters
             full_command = self._build_command(command, params)
             
             logger.debug(f"Executing G'MIC command: {full_command}")
             
-            # Run the filter
-            self._interpreter.run(full_command, gmic_images)
+            # Run the filter using gmic.Gmic().run() with ImageList
+            # This is the correct v3.6 API that modifies images in-place
+            image_list = gmic.ImageList([gmic_img])
+            g = gmic.Gmic()
+            g.run(full_command, image_list)
             
             # Convert back to ImageData
-            if len(gmic_images) == 0:
+            if len(image_list) == 0:
                 raise GmicError("G'MIC filter produced no output")
             
-            return self._from_gmic_image(gmic_images[0])
+            return self._from_gmic_image(image_list[0])
             
         except Exception as e:
             if "gmic" in str(type(e).__module__).lower():
                 raise GmicError(f"G'MIC error: {e}") from e
             raise
     
-    def _to_gmic_images(self, image: "ImageData") -> list:
-        """Convert ImageData to G'MIC GmicImage list."""
+    def _to_gmic_image(self, image: "ImageData"):
+        """Convert ImageData to G'MIC Image."""
         # Get numpy array (H, W, C) with values 0-1 as float32
         arr = image.to_numpy(dtype=np.float32)
         
@@ -117,35 +117,37 @@ class GmicRunner:
         if arr.shape[2] == 4:
             arr = arr[:, :, :3]
         
-        # Use from_numpy_helper with:
-        # - deinterleave=True (convert RGB,RGB,RGB -> RRR,GGG,BBB)
-        # - permute='yxzc' to convert (H,W,1,C) to G'MIC's native (W,H,D,S) format
-        # First expand to 4D: (H, W, C) -> (H, W, 1, C) for the z dimension
-        arr = arr[:, :, np.newaxis, :]  # (H, W, 1, C)
-        
-        gmic_img = gmic.GmicImage.from_numpy_helper(arr, deinterleave=True, permute='yxzc')
-        
-        return [gmic_img]
+        # gmic v3.6+ uses gmic.Image which accepts numpy arrays
+        return gmic.Image(arr)
     
     def _from_gmic_image(self, gmic_img) -> "ImageData":
-        """Convert G'MIC GmicImage back to ImageData."""
+        """Convert G'MIC Image back to ImageData."""
         from ai_image_studio.core.data_types import ImageData
         
-        # Use to_numpy_helper to:
-        # - interleave=True (convert RRR,GGG,BBB -> RGB,RGB,RGB)
-        # - permute='yxzc' to get back (H,W,D,C) format from G'MIC's (W,H,D,S)
-        # - squeeze_shape=True to remove dimensions of size 1
-        arr = gmic_img.to_numpy_helper(
-            interleave=True,
-            permute='yxzc',
-            squeeze_shape=True,
-        )
+        # gmic v3.6+ to_numpy returns array
+        arr = gmic_img.to_numpy()
         
         # Scale back to 0-1
         arr = arr.astype(np.float32) / 255.0
         arr = np.clip(arr, 0.0, 1.0)
         
-        # Handle different dimensional outputs
+        # Handle different dimensional outputs from G'MIC
+        # G'MIC typically returns (H, W, D, C) format
+        if arr.ndim == 4:
+            # Take first depth slice if D > 1 
+            # Shape could be (H, W, D, C) or (H, W, C, D)
+            # We want (H, W, C) where C is channels (3 or 4)
+            if arr.shape[3] <= 4:
+                # Last dim is likely channels (C) - take first depth slice
+                arr = arr[:, :, 0, :]
+            elif arr.shape[2] <= 4:
+                # Third dim is likely channels - take first of last dim
+                arr = arr[:, :, :, 0]
+            else:
+                # Unknown format, just take first of each extra dim
+                arr = arr[:, :, 0, 0] if arr.shape[2] > 4 else arr[:, :, :3, 0]
+        
+        # Handle different shapes
         if arr.ndim == 2:
             # Grayscale -> RGB
             arr = np.stack([arr, arr, arr], axis=-1)

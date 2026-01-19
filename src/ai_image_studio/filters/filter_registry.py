@@ -231,7 +231,7 @@ _register(FilterSpec(
 _register(FilterSpec(
     id="grayscale",
     name="Grayscale",
-    command="luminance",
+    command="to_gray to_rgb",  # Convert to gray then back to RGB format
     category="Color",
     description="Convert to grayscale",
     params=[],
@@ -300,7 +300,7 @@ _register(FilterSpec(
 _register(FilterSpec(
     id="swirl",
     name="Swirl",
-    command="swirl",
+    command="twirl",  # G'MIC v3.6+ uses 'twirl' not 'swirl'
     category="Distort",
     description="Swirl distortion",
     params=[
