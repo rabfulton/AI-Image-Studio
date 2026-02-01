@@ -113,6 +113,7 @@ class VisualNode:
     is_selected: bool = False
     is_hovered: bool = False
     preview_image: object = None  # PIL Image or None
+    badge_text: str = ""
 
 
 class NodeGraphCanvas(QWidget):
@@ -500,6 +501,35 @@ class NodeGraphCanvas(QWidget):
         painter.setFont(title_font)
         title_rect = QRectF(sx + 10, sy, sw - 20, self.NODE_HEADER_HEIGHT * self._transform.zoom)
         painter.drawText(title_rect, Qt.AlignmentFlag.AlignVCenter, node.title)
+
+        # Optional badge (e.g. Preview layer index/name)
+        if node.badge_text:
+            badge_font = QFont(self._socket_font)
+            badge_font.setPointSizeF(badge_font.pointSizeF() * self._transform.zoom)
+            painter.setFont(badge_font)
+
+            fm = QFontMetrics(badge_font)
+            text = node.badge_text
+            padding_x = int(8 * self._transform.zoom)
+            padding_y = int(3 * self._transform.zoom)
+            text_w = fm.horizontalAdvance(text)
+            text_h = fm.height()
+
+            pill_w = text_w + padding_x * 2
+            pill_h = text_h + padding_y * 2
+            pill_x = int(sx + sw - pill_w - (10 * self._transform.zoom))
+            pill_y = int(sy + (self.NODE_HEADER_HEIGHT * self._transform.zoom - pill_h) / 2)
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 80))
+            painter.drawRoundedRect(QRectF(pill_x, pill_y, pill_w, pill_h), 6, 6)
+
+            painter.setPen(QColor("#ffffff"))
+            painter.drawText(
+                QRectF(pill_x + padding_x, pill_y + padding_y, text_w, text_h),
+                Qt.AlignmentFlag.AlignVCenter,
+                text,
+            )
         
         # Preview image thumbnail (if any)
         if node.preview_image is not None:

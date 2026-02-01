@@ -58,11 +58,18 @@ PREVIEW_NODE = NodeType(
     ],
     outputs=[],  # Terminal node - no outputs
     parameters=[
+        ParameterDefinition.integer(
+            name="layer_index",
+            label="Layer Index",
+            default=0,
+            min_value=0,
+            description="Layer index to write to (auto-assigned on node creation)",
+        ),
         ParameterDefinition.text(
-            name="label",
-            label="Label",
-            default="Preview",
-            description="Label for this preview",
+            name="layer_name",
+            label="Layer Name",
+            default="",
+            description="Optional display name for the layer",
         ),
     ],
     executor=preview_executor,

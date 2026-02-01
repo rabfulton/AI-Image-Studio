@@ -61,6 +61,11 @@ from ai_image_studio.core.execution import (
     get_engine,
 )
 
+from ai_image_studio.core.layers import (
+    Layer,
+    LayerStack,
+)
+
 
 __all__ = [
     # graph.py
@@ -106,4 +111,7 @@ __all__ = [
     "ExecutionProgress",
     "ExecutionStatus",
     "get_engine",
+    # layers.py
+    "Layer",
+    "LayerStack",
 ]

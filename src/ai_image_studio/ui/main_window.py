@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QImage, QKeySequence
 
 
 class MainWindow(QMainWindow):
@@ -46,6 +46,11 @@ class MainWindow(QMainWindow):
         # Initialize core model (NodeGraph mirrors visual canvas)
         from ai_image_studio.core.graph import NodeGraph
         self._graph = NodeGraph("Workspace")
+
+        # Layer stack (Output Studio)
+        from ai_image_studio.core.layers import LayerStack
+        self._layer_stack = LayerStack()
+        self._selected_layer_index: int | None = None
         
         # Node ID mapping: visual_id (str) <-> core_id (UUID)
         self._node_id_map: dict[str, object] = {}  # str -> UUID
@@ -225,7 +230,7 @@ class MainWindow(QMainWindow):
     
     def _setup_dock_widgets(self) -> None:
         """Create dock widgets for panels."""
-        from ai_image_studio.ui.panels import NodeLibraryPanel, PropertiesPanel
+        from ai_image_studio.ui.panels import NodeLibraryPanel, PropertiesPanel, LayersPanel
         
         # Node Library dock (left)
         self._node_library_dock = QDockWidget("Node Library", self)
@@ -267,8 +272,23 @@ class MainWindow(QMainWindow):
         self._gallery_panel.workflow_load_requested.connect(self._on_workflow_load)
         self._gallery_dock.setWidget(self._gallery_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._gallery_dock)
-        
-        # Stack gallery below properties
+
+        # Layers dock (right)
+        self._layers_dock = QDockWidget("Layers", self)
+        self._layers_dock.setObjectName("layers_dock")
+        self._layers_dock.setAllowedAreas(
+            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        self._layers_panel = LayersPanel()
+        self._layers_panel.layer_selected.connect(self._on_layer_selected)
+        self._layers_panel.layer_visibility_changed.connect(self._on_layer_visibility_changed)
+        self._layers_panel.add_layer_requested.connect(self._on_add_layer_requested)
+        self._layers_panel.delete_layer_requested.connect(self._on_delete_layer_requested)
+        self._layers_dock.setWidget(self._layers_panel)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._layers_dock)
+
+        # Tabify panels on the right
+        self.tabifyDockWidget(self._properties_dock, self._layers_dock)
         self.tabifyDockWidget(self._properties_dock, self._gallery_dock)
         self._properties_dock.raise_()  # Show properties by default
         
@@ -288,8 +308,36 @@ class MainWindow(QMainWindow):
         # Add toggle actions to View menu
         self._view_menu.addAction(self._node_library_dock.toggleViewAction())
         self._view_menu.addAction(self._properties_dock.toggleViewAction())
+        self._view_menu.addAction(self._layers_dock.toggleViewAction())
         self._view_menu.addAction(self._gallery_dock.toggleViewAction())
         self._view_menu.addAction(self._console_dock.toggleViewAction())
+
+        self._refresh_layers_panel()
+
+    def _refresh_layers_panel(self) -> None:
+        self._layers_panel.set_layers(self._layer_stack.layers, self._selected_layer_index)
+
+    def _on_layer_selected(self, index: int) -> None:
+        self._selected_layer_index = index
+        self._refresh_layers_panel()
+
+    def _on_layer_visibility_changed(self, index: int, visible: bool) -> None:
+        self._layer_stack.set_layer_visibility(index, visible)
+        self._refresh_layers_panel()
+        self._update_output_studio_from_layers()
+
+    def _on_add_layer_requested(self) -> None:
+        index = self._layer_stack.next_available_index()
+        self._layer_stack.add_layer(index=index)
+        self._selected_layer_index = index
+        self._refresh_layers_panel()
+
+    def _on_delete_layer_requested(self, index: int) -> None:
+        self._layer_stack.remove_layer(index)
+        if self._selected_layer_index == index:
+            self._selected_layer_index = None
+        self._refresh_layers_panel()
+        self._update_output_studio_from_layers()
     
     def _setup_status_bar(self) -> None:
         """Create and configure the status bar."""
@@ -781,33 +829,62 @@ class MainWindow(QMainWindow):
             self._console_panel.log_success(f"Workflow complete! Executed {len(job.results)} nodes.")
             self._console_panel.set_progress(100)
             self._console_panel.set_status("Complete")
-            
-            # Find image outputs and display them
+
+            # Apply Preview node outputs into the layer stack.
+            updated_layers = False
             for node_id, result in job.results.items():
-                if isinstance(result, dict) and "image" in result:
-                    image_data = result["image"]
-                    
-                    # Show in Output Studio
-                    self._output_studio.set_image_from_data(image_data)
-                    
-                    # Get prompt from result or node
-                    prompt = result.get("revised_prompt", "")
-                    if not prompt:
-                        node = self._graph.get_node(node_id)
-                        prompt = node.get_parameter("prompt", "") if node else ""
-                    
-                    # Add to gallery with workflow metadata
-                    workflow_metadata = self._get_current_workflow_metadata()
-                    self._gallery_panel.add_image(
-                        image_data,
-                        prompt=prompt,
-                        model=result.get("model_id", ""),
-                        auto_save=True,
-                        workflow_metadata=workflow_metadata,
-                    )
-                    
-                    self._console_panel.log_info("Image added to Gallery")
-                    break  # Display first image found
+                node = self._graph.get_node(node_id)
+                if not node or node.type_id != "output.preview":
+                    continue
+                if not (isinstance(result, dict) and "image" in result):
+                    continue
+                image_data = result["image"]
+                try:
+                    layer_index = int(node.get_parameter("layer_index", 0))
+                except Exception:
+                    layer_index = 0
+                layer_name = node.get_parameter("layer_name", "")
+                self._layer_stack.set_layer_name(layer_index, (layer_name or "").strip() or None)
+                self._layer_stack.set_layer_image(layer_index, image_data)
+                updated_layers = True
+
+            if updated_layers:
+                self._refresh_layers_panel()
+                self._update_output_studio_from_layers()
+
+            # Decide what to add to the gallery (composite when available).
+            gallery_image = self._layer_stack.get_composite() if updated_layers else None
+            gallery_result: dict | None = None
+
+            if gallery_image is None:
+                for _, result in job.results.items():
+                    if isinstance(result, dict) and "image" in result:
+                        gallery_image = result["image"]
+                        gallery_result = result
+                        break
+
+            if gallery_image is not None:
+                prompt = ""
+                model_id = ""
+                if gallery_result:
+                    prompt = gallery_result.get("revised_prompt", "") or ""
+                    model_id = gallery_result.get("model_id", "") or ""
+                if not prompt:
+                    for node_id, result in job.results.items():
+                        if isinstance(result, dict) and "image" in result:
+                            node = self._graph.get_node(node_id)
+                            prompt = node.get_parameter("prompt", "") if node else ""
+                            break
+
+                workflow_metadata = self._get_current_workflow_metadata()
+                self._gallery_panel.add_image(
+                    gallery_image,
+                    prompt=prompt,
+                    model=model_id,
+                    auto_save=True,
+                    workflow_metadata=workflow_metadata,
+                )
+                self._console_panel.log_info("Image added to Gallery")
             
             self.statusBar().showMessage("Workflow complete!", 5000)
             
@@ -820,6 +897,10 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Workflow cancelled", 3000)
         
         self._console_panel.clear_progress()
+
+    def _update_output_studio_from_layers(self) -> None:
+        composite = self._layer_stack.get_composite()
+        self._output_studio.set_image_from_data(composite)
     
     def _on_generation_error(self, error: str) -> None:
         """Handle execution error."""
@@ -842,18 +923,54 @@ class MainWindow(QMainWindow):
         item = self._gallery_panel.get_item(item_id)
         if not item:
             return
-        
-        # Items from current session have image_data, loaded from disk have qimage
-        if item.image_data:
-            self._output_studio.set_image_from_data(item.image_data)
-        elif item.qimage:
-            self._output_studio.set_image(item.qimage)
-        else:
+
+        image_data = self._image_data_from_gallery_item(item)
+        if image_data is None:
             self._console_panel.log_warning("Image not available")
             return
-        
-        self._console_panel.log_info(f"Loaded image from gallery")
-        self.statusBar().showMessage("Image loaded from gallery", 2000)
+
+        # Layer-aware behavior: load into selected layer if set; otherwise avoid
+        # overwriting base layer if it already has content.
+        target_index = self._selected_layer_index
+        if target_index is None:
+            base = self._layer_stack.get_layer(0)
+            target_index = 0 if (base is None or not base.has_image) else self._layer_stack.next_available_index()
+
+        self._layer_stack.set_layer_image(target_index, image_data)
+        self._selected_layer_index = target_index
+        self._refresh_layers_panel()
+        self._update_output_studio_from_layers()
+
+        self._console_panel.log_info(f"Loaded image from gallery into layer {target_index}")
+        self.statusBar().showMessage(f"Loaded into layer {target_index}", 2000)
+
+    def _image_data_from_gallery_item(self, item):
+        """Normalize a GalleryItem image (ImageData/QImage) into ImageData."""
+        if getattr(item, "image_data", None) is not None:
+            return item.image_data
+
+        qimage = getattr(item, "qimage", None)
+        if qimage is None:
+            return None
+
+        try:
+            from ai_image_studio.core.data_types import ImageData
+            import numpy as np
+
+            qimg = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
+            width = qimg.width()
+            height = qimg.height()
+            bytes_per_line = qimg.bytesPerLine()
+
+            ptr = qimg.bits()
+            ptr.setsize(qimg.sizeInBytes())
+            buf = np.frombuffer(ptr, dtype=np.uint8)
+            buf = buf.reshape((height, bytes_per_line))
+            buf = buf[:, : width * 4]
+            rgba = buf.reshape((height, width, 4))
+            return ImageData.from_numpy(rgba)
+        except Exception:
+            return None
     
     def _on_gallery_preview(self, item_id: str) -> None:
         """Display image in Output Studio on single-click (without loading workflow)."""
@@ -1139,10 +1256,65 @@ class MainWindow(QMainWindow):
         # Store type_id in visual node for later lookup
         if visual_id in self._node_graph_canvas._nodes:
             self._node_graph_canvas._nodes[visual_id].type_id = type_id
-        
+
+        # Preview nodes define layers
+        if type_id == "output.preview":
+            layer_index = self._next_available_preview_layer_index()
+            core_node.set_parameter("layer_index", layer_index)
+            core_node.set_parameter("layer_name", "")
+            self._sync_layer_from_preview_node(core_node)
+            self._selected_layer_index = layer_index
+            self._refresh_layers_panel()
+            self._update_preview_node_badge(visual_id)
+
         self._console_panel.log_info(f"Added node: {title}")
         self.statusBar().showMessage(f"Added {title} node", 2000)
-    
+
+    def _next_available_preview_layer_index(self) -> int:
+        used: set[int] = set()
+        for node in self._graph.nodes.values():
+            if node.type_id != "output.preview":
+                continue
+            try:
+                idx = int(node.get_parameter("layer_index", -1))
+            except Exception:
+                continue
+            if idx >= 0:
+                used.add(idx)
+
+        idx = 0
+        while idx in used:
+            idx += 1
+        return idx
+
+    def _sync_layer_from_preview_node(self, core_node) -> None:
+        try:
+            layer_index = int(core_node.get_parameter("layer_index", 0))
+        except Exception:
+            layer_index = 0
+        layer_name = core_node.get_parameter("layer_name", "")
+        self._layer_stack.set_layer_name(layer_index, (layer_name or "").strip() or None)
+
+    def _update_preview_node_badge(self, visual_id: str) -> None:
+        if visual_id not in self._node_id_map:
+            return
+        core_id = self._node_id_map[visual_id]
+        core_node = self._graph.get_node(core_id)
+        if core_node is None or core_node.type_id != "output.preview":
+            return
+        try:
+            layer_index = int(core_node.get_parameter("layer_index", 0))
+        except Exception:
+            layer_index = 0
+        layer_name = (core_node.get_parameter("layer_name", "") or "").strip()
+        badge = f"L{layer_index}" if not layer_name else f"L{layer_index} {layer_name}"
+
+        visual = self._node_graph_canvas._nodes.get(visual_id)
+        if visual is None:
+            return
+        visual.badge_text = badge
+        self._node_graph_canvas.update()
+
     def _on_parameter_changed(self, node_id: str, param_name: str, value) -> None:
         """Handle parameter change from properties panel."""
         # Sync to core Node model
@@ -1151,6 +1323,12 @@ class MainWindow(QMainWindow):
             core_node = self._graph.get_node(core_id)
             if core_node:
                 core_node.set_parameter(param_name, value)
+
+                if core_node.type_id == "output.preview" and param_name in ("layer_index", "layer_name"):
+                    self._sync_layer_from_preview_node(core_node)
+                    self._refresh_layers_panel()
+                    self._update_preview_node_badge(node_id)
+                    self._update_output_studio_from_layers()
                 
                 # Check if this is a file path parameter - load preview
                 if param_name in ("file", "image_path", "input_image") and value:

@@ -13,10 +13,12 @@ from ai_image_studio.ui.panels.node_library import NodeLibraryPanel
 from ai_image_studio.ui.panels.properties import PropertiesPanel
 from ai_image_studio.ui.panels.console import ConsolePanel
 from ai_image_studio.ui.panels.gallery import GalleryPanel
+from ai_image_studio.ui.panels.layers import LayersPanel
 
 __all__ = [
     "NodeLibraryPanel",
     "PropertiesPanel",
     "ConsolePanel",
     "GalleryPanel",
+    "LayersPanel",
 ]
